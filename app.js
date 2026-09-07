@@ -25,10 +25,24 @@ const CORS_PROXIES = [
   'https://api.allorigins.win/raw?url=',
 ];
 
+const DEFAULT_BEST = [
+  { ticker: 'BBSE3', name: 'BB Seguridade' },
+  { ticker: 'BBAS3', name: 'Banco do Brasil' },
+  { ticker: 'CMIG4', name: 'Cemig' },
+  { ticker: 'TAEE11', name: 'Taesa' },
+  { ticker: 'TRPL4', name: 'ISA Cteep' },
+  { ticker: 'UNIP6', name: 'Unipar' },
+  { ticker: 'SANB4', name: 'Santander Brasil' },
+  { ticker: 'AURE3', name: 'Auren Energia' },
+  { ticker: 'KLBN4', name: 'Klabin' },
+  { ticker: 'IRBR3', name: 'IRB Brasil' },
+];
+
 /* ─── Estado Global ───────────────────────────────────────── */
 let state = {
   portfolio:   [],  // ativos na carteira
   watchlist:   [],  // ativos no radar
+  best:        [],  // ativos no grupo Best
 };
 
 let currentFilter   = 'ALL';
@@ -37,6 +51,31 @@ let editingId       = null;
 let sessionTimer    = null;
 let derivedKey      = null; // Chave AES derivada do PIN (em memória apenas)
 let isFirstAccess   = false;
+
+/* ─── Best Widget State ───────────────────────────────────── */
+let bestEditList    = [];
+let bestPrices      = {};
+
+/* ─── Helper de Logos dos Ativos ──────────────────────────── */
+function getAssetLogoUrl(ticker) {
+  if (!ticker) return '';
+  const clean = ticker.toUpperCase().trim();
+  return `https://raw.githubusercontent.com/thefintz/icones-b3/main/icones/${clean}.png`;
+}
+
+function renderAssetLogoHtml(ticker, cssClass = 'asset-logo') {
+  const clean = (ticker || '').toUpperCase().trim();
+  const initials = clean.replace(/[^A-Z]/g, '').slice(0, 4) || clean.slice(0, 4);
+  const url = getAssetLogoUrl(clean);
+  const fbClass = cssClass === 'explorer-logo' ? 'explorer-logo-fb' : cssClass === 'fav-logo' ? 'fav-logo-fb' : 'asset-logo-fallback';
+  return `
+    <div class="${cssClass}" title="${clean}">
+      <img src="${url}" alt="${clean}" loading="lazy"
+           onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+      <span class="${fbClass}" style="display:none;">${initials}</span>
+    </div>
+  `;
+}
 
 /* ─── Explorer State ─────────────────────────────────────── */
 let explorerData    = [];   // cópia de B3_STOCKS filtrada/ordenada
@@ -214,7 +253,10 @@ document.getElementById('login-form').addEventListener('submit', async function(
           showLoginError('Erro ao decifrar dados. O PIN pode estar incorreto ou os dados foram corrompidos.');
           btn.disabled = false; btn.textContent = 'Entrar'; return;
         }
-        state = { portfolio: [], watchlist: [], ...decrypted };
+        state = { portfolio: [], watchlist: [], best: JSON.parse(JSON.stringify(DEFAULT_BEST)), ...decrypted };
+        if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
+          state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+        }
       }
       derivedKey = key;
       saveAuthAttempts({});
@@ -238,15 +280,18 @@ function openApp() {
   document.getElementById('app').style.flexDirection = 'column';
   startSessionTimer();
   renderAll();
+  renderBestWidget();
   renderFavoritosWidget();
   initExplorer();
   refreshAllQuotes();
+  refreshBestQuotes();
 }
 
 function handleLogout() {
   derivedKey = null;
-  state = { portfolio: [], watchlist: [] };
+  state = { portfolio: [], watchlist: [], best: [] };
   explorerPrices = {};
+  bestPrices = {};
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-pin').value = '';
@@ -433,7 +478,10 @@ function switchTab(tab) {
   }
 
   if (tab === 'explorer') renderExplorerTable();
-  if (tab === 'carteira') renderFavoritosWidget();
+  if (tab === 'carteira') {
+    renderBestWidget();
+    renderFavoritosWidget();
+  }
 }
 
 // Delegação de cliques nos botões de nav
@@ -558,7 +606,8 @@ function renderPortfolio() {
     return `
     <div class="asset-card" id="card-${a.id}">
       <div class="asset-card-header">
-        <div class="asset-identity">
+        <div class="asset-identity" style="display:flex;align-items:center;gap:10px;">
+          ${renderAssetLogoHtml(a.ticker, 'asset-logo')}
           <div>
             <div style="display:flex;align-items:center;gap:7px;">
               <span class="asset-tag">${escapeHtml(a.ticker)}</span>
@@ -663,7 +712,8 @@ function renderWatchlist() {
     return `
     <div class="asset-card" id="card-w-${a.id}">
       <div class="asset-card-header">
-        <div class="asset-identity">
+        <div class="asset-identity" style="display:flex;align-items:center;gap:10px;">
+          ${renderAssetLogoHtml(a.ticker, 'asset-logo')}
           <div>
             <div class="asset-tag">${escapeHtml(a.ticker)}</div>
             ${a.name ? `<div class="asset-name">${escapeHtml(a.name)}</div>` : ''}
@@ -742,12 +792,187 @@ function renderFavoritosWidget() {
 
     return `
     <div class="fav-card" onclick="switchTab('radar')">
-      <div class="fav-ticker">${escapeHtml(a.ticker)}</div>
-      ${a.name ? `<div class="fav-name">${escapeHtml(a.name)}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        ${renderAssetLogoHtml(a.ticker, 'fav-logo')}
+        <div style="flex:1;min-width:0;">
+          <div class="fav-ticker">${escapeHtml(a.ticker)}</div>
+          ${a.name ? `<div class="fav-name">${escapeHtml(a.name)}</div>` : ''}
+        </div>
+      </div>
       <div class="fav-price">${cur ? fmtN(cur) : '—'}</div>
       ${marginHtml}
     </div>`;
   }).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   WIDGET BEST — SELEÇÃO PESSOAL (Editável)
+   ═══════════════════════════════════════════════════════════ */
+
+function renderBestWidget() {
+  const container = document.getElementById('best-scroll');
+  if (!container) return;
+
+  if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
+    state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+  }
+
+  container.innerHTML = state.best.map(item => {
+    const pData = bestPrices[item.ticker] || explorerPrices[item.ticker];
+    const price = pData?.price != null ? fmtN(pData.price) : '—';
+    const chg = pData?.change;
+    const chgClass = (chg > 0) ? 'pos' : (chg < 0) ? 'neg' : 'neutral';
+    const chgText = (chg != null) ? `${chg > 0 ? '+' : ''}${chg.toFixed(2)}%` : '—';
+
+    return `
+      <div class="best-card" onclick="quickViewBestTicker('${item.ticker}')" title="Clique para detalhes no Explorer">
+        <div class="best-card-top">
+          ${renderAssetLogoHtml(item.ticker, 'fav-logo')}
+          <div class="best-card-info">
+            <div class="best-ticker">${escapeHtml(item.ticker)}</div>
+            <div class="best-name" title="${escapeHtml(item.name || item.ticker)}">${escapeHtml(item.name || item.ticker)}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:2px;">
+          <div class="best-price">${price}</div>
+          <div class="best-change ${chgClass}">${chgText}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function refreshBestQuotes() {
+  if (!state.best || !state.best.length) return;
+  const tickers = state.best.map(b => b.ticker);
+  try {
+    const quotes = await QuoteService.getQuotes(tickers);
+    for (const [t, data] of Object.entries(quotes)) {
+      if (data) bestPrices[t] = data;
+    }
+    renderBestWidget();
+  } catch (err) {
+    console.warn('Erro ao atualizar cotações Best:', err);
+  }
+}
+
+function quickViewBestTicker(ticker) {
+  const inRadar = state.watchlist.some(w => w.ticker === ticker);
+  if (inRadar) {
+    switchTab('radar');
+  } else {
+    switchTab('explorer');
+    const input = document.getElementById('explorer-search-input');
+    if (input) {
+      input.value = ticker;
+      explorerSearch();
+    }
+  }
+}
+
+function openBestEditModal() {
+  if (!state.best || !state.best.length) {
+    state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+  }
+  bestEditList = JSON.parse(JSON.stringify(state.best));
+  const input = document.getElementById('best-search-input');
+  if (input) input.value = '';
+  const sug = document.getElementById('best-search-suggestions');
+  if (sug) sug.innerHTML = '';
+  renderBestEditList();
+  openModal('modal-best-edit');
+}
+
+function renderBestEditList() {
+  const container = document.getElementById('best-current-list');
+  if (!container) return;
+  if (!bestEditList.length) {
+    container.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;text-align:center;padding:12px;">Nenhum ativo na lista Best. Adicione novos ativos acima.</div>';
+    return;
+  }
+  container.innerHTML = bestEditList.map((item, idx) => `
+    <div class="best-edit-item">
+      ${renderAssetLogoHtml(item.ticker, 'fav-logo')}
+      <div class="best-edit-item-info">
+        <div class="best-edit-ticker">${escapeHtml(item.ticker)}</div>
+        <div class="best-edit-name">${escapeHtml(item.name || '')}</div>
+      </div>
+      <button class="best-remove-btn" onclick="removeBestItem(${idx})" title="Remover da lista">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  `).join('');
+}
+
+function removeBestItem(idx) {
+  bestEditList.splice(idx, 1);
+  renderBestEditList();
+}
+
+function bestSearchFilter() {
+  const val = (document.getElementById('best-search-input').value || '').toUpperCase().trim();
+  const sug = document.getElementById('best-search-suggestions');
+  if (!val || val.length < 2) {
+    sug.innerHTML = '';
+    return;
+  }
+  const stockList = (typeof B3_STOCKS !== 'undefined') ? B3_STOCKS : [];
+  const matches = stockList.filter(s =>
+    s.ticker.includes(val) || (s.name || '').toUpperCase().includes(val)
+  ).slice(0, 5);
+
+  if (!matches.length) {
+    sug.innerHTML = `<div style="font-size:0.75rem;color:var(--text-muted);padding:4px;">Nenhuma sugestão encontrada. Clique em "Adicionar" para incluir <b>${val}</b>.</div>`;
+    return;
+  }
+
+  sug.innerHTML = matches.map(m => `
+    <div class="best-suggestion-item" onclick="selectBestSuggestion('${m.ticker}', '${escapeAttr(m.name)}')">
+      ${renderAssetLogoHtml(m.ticker, 'explorer-logo')}
+      <span class="best-suggestion-ticker">${escapeHtml(m.ticker)}</span>
+      <span class="best-suggestion-name">${escapeHtml(m.name)}</span>
+      <span style="font-size:0.7rem;color:var(--accent-blue);font-weight:600;">+ Adicionar</span>
+    </div>
+  `).join('');
+}
+
+function selectBestSuggestion(ticker, name) {
+  if (bestEditList.some(b => b.ticker === ticker)) {
+    showToast(`${ticker} já está no grupo Best.`, 'info');
+    return;
+  }
+  bestEditList.push({ ticker, name });
+  const input = document.getElementById('best-search-input');
+  if (input) input.value = '';
+  const sug = document.getElementById('best-search-suggestions');
+  if (sug) sug.innerHTML = '';
+  renderBestEditList();
+}
+
+function bestAddFromSearch() {
+  const input = document.getElementById('best-search-input');
+  const val = (input?.value || '').toUpperCase().trim();
+  if (!val) return;
+  if (bestEditList.some(b => b.ticker === val)) {
+    showToast(`${val} já está no grupo Best.`, 'info');
+    return;
+  }
+  const stockList = (typeof B3_STOCKS !== 'undefined') ? B3_STOCKS : [];
+  const stock = stockList.find(s => s.ticker === val);
+  bestEditList.push({ ticker: val, name: stock ? stock.name : val });
+  if (input) input.value = '';
+  const sug = document.getElementById('best-search-suggestions');
+  if (sug) sug.innerHTML = '';
+  renderBestEditList();
+}
+
+function saveBestEdit() {
+  state.best = [...bestEditList];
+  saveEncryptedState();
+  renderBestWidget();
+  refreshBestQuotes();
+  closeModal('modal-best-edit');
+  showToast('Grupo Best atualizado com sucesso!', 'success');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -841,7 +1066,12 @@ function renderExplorerTable() {
 
     return `
     <tr>
-      <td><span class="explorer-ticker">${escapeHtml(s.ticker)}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${renderAssetLogoHtml(s.ticker, 'explorer-logo')}
+          <span class="explorer-ticker">${escapeHtml(s.ticker)}</span>
+        </div>
+      </td>
       <td><span class="explorer-name" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</span></td>
       <td style="color:var(--text-secondary);font-size:.78rem;">${escapeHtml(s.sector)}</td>
       <td class="explorer-price">${priceStr}</td>
@@ -949,6 +1179,7 @@ async function refreshAllQuotes() {
   const tickers = [
     ...state.portfolio.map(a => a.ticker),
     ...state.watchlist.map(a => a.ticker),
+    ...(state.best || []).map(a => a.ticker),
   ];
 
   if (tickers.length === 0) {
@@ -969,6 +1200,11 @@ async function refreshAllQuotes() {
     state.watchlist.forEach(a => {
       const q = quotes[a.ticker];
       if (q?.price) { a.currentPrice = q.price; }
+    });
+
+    (state.best || []).forEach(a => {
+      const q = quotes[a.ticker];
+      if (q) bestPrices[a.ticker] = q;
     });
 
     if (updated > 0) saveEncryptedState();
@@ -1230,6 +1466,9 @@ function initDefaultData() {
       { id: genId(), ticker: 'PRIO3', name: 'PRIO S.A.', type: 'STOCK', targetPrice: 50.0, currentPrice: null, notes: 'Petróleo independente' },
     ];
   }
+  if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
+    state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1305,6 +1544,7 @@ function renderAll() {
   renderSummary();
   renderPortfolio();
   renderWatchlist();
+  renderBestWidget();
   renderFavoritosWidget();
   if (currentTab === 'explorer') renderExplorerTable();
 }
