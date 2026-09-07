@@ -1,0 +1,17 @@
+{
+  "name": "Caderneta de Investimentos",
+  "short_name": "Caderneta",
+  "description": "Controle pessoal de carteira de investimentos e watchlist com cotações em tempo real.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#0a0f1d",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f172a'/><path d='M120 380 L200 280 L280 320 L392 160' fill='none' stroke='%2310b981' stroke-width='36' stroke-linecap='round' stroke-linejoin='round'/><circle cx='392' cy='160' r='24' fill='%2300b0ff'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
