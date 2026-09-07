@@ -593,12 +593,19 @@ document.getElementById('sync-connect-form').addEventListener('submit', async fu
   // 1. Caso venha via link direto (#vault=...)
   let vault = window.pendingVaultTransfer;
 
-  // 2. Caso o usuário tenha colado o Código do Cofre (base64) no campo
-  if (!vault && syncInput.length > 50) {
-    try {
-      vault = JSON.parse(decodeURIComponent(atob(syncInput)));
-    } catch {
-      try { vault = JSON.parse(atob(syncInput)); } catch {}
+  // 2. Caso o usuário tenha colado o Link completo (#vault=...) ou o Código do Cofre (base64) no campo
+  if (!vault) {
+    if (syncInput.includes('#vault=')) {
+      try {
+        const b64 = syncInput.split('#vault=')[1].split('&')[0];
+        vault = JSON.parse(decodeURIComponent(atob(b64)));
+      } catch {}
+    } else if (syncInput.length > 30) {
+      try {
+        vault = JSON.parse(decodeURIComponent(atob(syncInput)));
+      } catch {
+        try { vault = JSON.parse(atob(syncInput)); } catch {}
+      }
     }
   }
 
