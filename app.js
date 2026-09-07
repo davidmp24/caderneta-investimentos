@@ -374,6 +374,20 @@ const BASELINE_CLOSING_PRICES = {
   'BOVA11': { price: 132.50, change: 0.45, name: 'iShares Ibovespa' },
   'XPLG11': { price: 104.80, change: -0.15, name: 'XP Log' },
   'PRIO3':  { price: 46.80, change: 1.30,  name: 'PRIO S.A.' },
+  'B3SA3':  { price: 10.95, change: -0.18, name: 'B3 S.A.' },
+  'BBDC4':  { price: 14.30, change: 0.28,  name: 'Bradesco PN' },
+  'ABEV3':  { price: 12.35, change: -0.40, name: 'Ambev' },
+  'RENT3':  { price: 44.80, change: -0.65, name: 'Localiza' },
+  'SBSP3':  { price: 91.50, change: 0.85,  name: 'Sabesp' },
+  'SUZB3':  { price: 57.20, change: 1.05,  name: 'Suzano' },
+  'LREN3':  { price: 16.85, change: 0.35,  name: 'Lojas Renner' },
+  'MGLU3':  { price: 8.90,  change: -1.20, name: 'Magazine Luiza' },
+  'MXRF11': { price: 10.15, change: 0.00,  name: 'Maxi Renda' },
+  'KNIP11': { price: 94.50, change: 0.15,  name: 'Kinea IP' },
+  'KNCR11': { price: 103.80,change: 0.10,  name: 'Kinea Rendimentos' },
+  'BTLG11': { price: 101.40,change: -0.10, name: 'BTG Logística' },
+  'XPML11': { price: 112.50,change: 0.20,  name: 'XP Malls' },
+  'IVVB11': { price: 348.00,change: 0.60,  name: 'iShares S&P 500' },
 };
 
 /** Verifica se a bolsa brasileira B3 está no horário de negociação aberto */
@@ -625,7 +639,10 @@ function renderSummary() {
   for (const a of state.portfolio) {
     const qty = parseFloat(a.quantity) || 0;
     const avg = parseFloat(a.avgPrice) || 0;
-    const cur = parseFloat(a.currentPrice) || avg;
+    const quote = getStockQuoteData(a.ticker);
+    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice)
+      : (quote?.price != null ? quote.price : avg);
     totalInvestido += qty * avg;
     totalAtual     += qty * cur;
   }
@@ -718,16 +735,22 @@ function renderPortfolio() {
     CRYPTO: ['cat-crypto', 'CRIPTO'], FIXED: ['cat-fixed', 'R.FIXA'], OTHER: ['cat-other', 'OUTRO'],
   };
 
+  const marketOpen = isB3MarketOpen();
+
   list.innerHTML = items.map(a => {
     const qty = parseFloat(a.quantity) || 0;
     const avg = parseFloat(a.avgPrice) || 0;
-    const cur = parseFloat(a.currentPrice) || avg;
+    const quote = getStockQuoteData(a.ticker);
+    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice)
+      : (quote?.price != null ? quote.price : avg);
     const invested = qty * avg;
     const atualVal = qty * cur;
     const pnl = atualVal - invested;
     const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
     const [catClass, catLabel] = catBadges[a.type] || ['cat-other', 'OUTRO'];
     const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+    const isClosedVal = !marketOpen || quote?.isClosed;
 
     return `
     <div class="asset-card" id="card-${a.id}">
@@ -764,8 +787,8 @@ function renderPortfolio() {
           <span class="asset-col-val">${fmtN(avg)}</span>
         </div>
         <div class="asset-col">
-          <span class="asset-col-label">Preço Atual</span>
-          <span class="asset-col-val price-editable" onclick="openEditAssetModal('${a.id}')">
+          <span class="asset-col-label">${isClosedVal ? 'Últ. Fechamento' : 'Preço Atual'}</span>
+          <span class="asset-col-val price-editable" onclick="openEditAssetModal('${a.id}')" title="${isClosedVal ? 'Mercado Fechado: último valor de fechamento registrado' : 'Preço em negociação'}">
             ${fmtN(cur)}
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </span>
@@ -786,7 +809,12 @@ function renderPortfolio() {
         </div>
       </div>
       <div class="asset-card-footer">
-        <span class="asset-notes">${escapeHtml(a.notes || '—')}</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="asset-notes">${escapeHtml(a.notes || '—')}</span>
+          <span class="best-badge-status ${isClosedVal ? 'closed' : 'open'}" style="font-size:0.6rem;">
+            ${isClosedVal ? 'Fechamento' : 'Ao vivo'}
+          </span>
+        </div>
         <span class="badge-profit ${pnlClass}">${pnl >= 0 ? '+' : ''}${fmtN(pnl)}</span>
       </div>
     </div>`;
@@ -821,9 +849,15 @@ function renderWatchlist() {
     return;
   }
 
+  const marketOpen = isB3MarketOpen();
+
   list.innerHTML = items.map(a => {
-    const cur    = parseFloat(a.currentPrice) || null;
+    const quote  = getStockQuoteData(a.ticker);
+    const cur    = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice)
+      : (quote?.price != null ? quote.price : null);
     const target = parseFloat(a.targetPrice) || null;
+    const isClosedVal = !marketOpen || quote?.isClosed;
 
     let badgeHtml = '';
     if (cur && target) {
@@ -856,7 +890,7 @@ function renderWatchlist() {
       </div>
       <div class="asset-grid">
         <div class="asset-col">
-          <span class="asset-col-label">Preço Atual</span>
+          <span class="asset-col-label">${isClosedVal ? 'Últ. Fechamento' : 'Preço Atual'}</span>
           <span class="asset-col-val">${cur ? fmtN(cur) : '—'}</span>
         </div>
         <div class="asset-col">
@@ -869,7 +903,12 @@ function renderWatchlist() {
         </div>
       </div>
       <div class="asset-card-footer">
-        <span class="asset-notes">${escapeHtml(a.notes || '—')}</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="asset-notes">${escapeHtml(a.notes || '—')}</span>
+          <span class="best-badge-status ${isClosedVal ? 'closed' : 'open'}" style="font-size:0.6rem;">
+            ${isClosedVal ? 'Fechamento' : 'Ao vivo'}
+          </span>
+        </div>
         <div style="display:flex;gap:6px;align-items:center;">
           ${badgeHtml}
           <button class="btn-convert-wallet" onclick="convertToPortfolio('${a.id}')">
@@ -901,9 +940,15 @@ function renderFavoritosWidget() {
     return;
   }
 
+  const marketOpen = isB3MarketOpen();
+
   container.innerHTML = items.map(a => {
-    const cur    = parseFloat(a.currentPrice) || null;
+    const quote  = getStockQuoteData(a.ticker);
+    const cur    = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice)
+      : (quote?.price != null ? quote.price : null);
     const target = parseFloat(a.targetPrice)  || null;
+    const isClosedVal = !marketOpen || quote?.isClosed;
 
     let marginHtml = '';
     if (cur && target) {
@@ -926,7 +971,12 @@ function renderFavoritosWidget() {
         </div>
       </div>
       <div class="fav-price">${cur ? fmtN(cur) : '—'}</div>
-      ${marginHtml}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-top:2px;">
+        ${marginHtml}
+        <span class="best-badge-status ${isClosedVal ? 'closed' : 'open'}" style="font-size:0.58rem;padding:0 4px;">
+          ${isClosedVal ? 'Fechamento' : 'Ao vivo'}
+        </span>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1243,7 +1293,8 @@ function renderExplorerTable() {
   const total   = explorerData.length;
 
   tbody.innerHTML = visible.map(s => {
-    const priceData = explorerPrices[s.ticker];
+    const quote     = getStockQuoteData(s.ticker);
+    const priceData = explorerPrices[s.ticker] || (quote?.price != null ? quote : null);
     const priceStr  = priceData?.price != null ? fmtN(priceData.price) : '—';
     const change    = priceData?.change ?? null;
     const changeStr = change != null
