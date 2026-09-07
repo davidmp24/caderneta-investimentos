@@ -1645,3 +1645,178 @@ main {
   border: 1px solid rgba(63, 185, 80, 0.2);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   SINCRONIZAÇÃO EM NUVEM & QR CODE (v1.5)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Tabs de Modo de Login (PIN vs Conectar Nuvem) */
+.login-mode-tabs {
+  display: flex;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 3px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 16px;
+  gap: 4px;
+}
+
+.login-mode-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 7px 10px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--ease-fast);
+}
+
+.login-mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.login-mode-btn.active {
+  background: var(--bg-card);
+  color: var(--accent-blue);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+}
+
+/* Header Cloud Sync Pill */
+.cloud-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--ease-fast);
+  user-select: none;
+}
+
+.cloud-sync-pill:hover {
+  background: rgba(88, 166, 255, 0.1);
+  border-color: rgba(88, 166, 255, 0.3);
+  color: var(--accent-blue);
+}
+
+.cloud-sync-pill .sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+  transition: all 0.3s ease;
+}
+
+.cloud-sync-pill.syncing .sync-dot {
+  background: var(--accent-yellow);
+  box-shadow: 0 0 8px var(--accent-yellow);
+  animation: pulse 1s infinite alternate;
+}
+
+.cloud-sync-pill.offline .sync-dot {
+  background: var(--text-muted);
+  box-shadow: none;
+}
+
+/* Sync ID display box in Settings */
+.sync-id-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  background: rgba(13, 17, 23, 0.8);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.sync-id-code {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  letter-spacing: 0.08em;
+}
+
+.btn-xs-copy, .btn-xs-qr {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  transition: all var(--ease-fast);
+}
+
+.btn-xs-copy:hover, .btn-xs-qr:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-card);
+}
+
+/* Modal QR Code styling */
+.sync-qrcode-container {
+  background: #ffffff;
+  padding: 14px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 180px;
+  min-height: 180px;
+}
+
+.sync-qrcode-container canvas,
+.sync-qrcode-container img {
+  display: block;
+}
+
+.sync-id-badge-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.sync-status-indicator {
+  display: inline-block;
+  font-size: 0.7rem;
+  margin-right: 4px;
+}
+
+.sync-status-indicator.online {
+  color: var(--accent-green);
+}
+
+.sync-status-indicator.syncing {
+  color: var(--accent-yellow);
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  100% { transform: scale(1.2); opacity: 1; }
+}
+
+

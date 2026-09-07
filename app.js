@@ -11,14 +11,22 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION   = '1.1.0';
-const STORAGE_KEY   = 'caderneta_v2_enc';    // Dados cifrados
-const AUTH_KEY      = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
-const SESSION_KEY   = 'caderneta_session';   // Sessão temporária
-const MAX_ATTEMPTS  = 5;
-const BLOCK_MS      = 30 * 60 * 1000;       // 30 min bloqueio
-const SESSION_TTL   = 30 * 60 * 1000;       // 30 min inatividade
-const PBKDF2_ITERS  = 150_000;
+const APP_VERSION        = '1.5.0';
+const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
+const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
+const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
+const SYNC_ID_KEY        = 'caderneta_sync_id';   // ID único da carteira para sincronização
+const CLOUD_ENDPOINT_KEY = 'caderneta_cloud_endpoint';
+const CLOUD_TOKEN_KEY    = 'caderneta_cloud_token';
+const LAST_SYNC_KEY      = 'caderneta_last_synced';
+const MAX_ATTEMPTS       = 5;
+const BLOCK_MS           = 30 * 60 * 1000;       // 30 min bloqueio
+const SESSION_TTL        = 30 * 60 * 1000;       // 30 min inatividade
+const PBKDF2_ITERS       = 150_000;
+
+// Configuração Padrão da Nuvem (Zero-Knowledge: apenas cofre cifrado trafega)
+const DEFAULT_CLOUD_URL   = 'https://flexible-scorpion-106260.upstash.io';
+const DEFAULT_CLOUD_TOKEN = 'gQAAAAAAAZ8UAQIgcDI0ZjI1YzU4ZTAxZTI0NWU1YjVmMzhjZWRjMDY2OGRmMA';
 
 const CORS_PROXIES = [
   'https://corsproxy.io/?',
@@ -165,6 +173,261 @@ function resetSessionTimer() { startSessionTimer(); }
   document.addEventListener(ev, resetSessionTimer, { passive: true });
 });
 
+/* ═══════════════════════════════════════════════════════════
+   SERVIÇO DE SINCRONIZAÇÃO EM NUVEM (ZERO-KNOWLEDGE)
+   ═══════════════════════════════════════════════════════════ */
+const SyncService = {
+  pushTimer: null,
+
+  getSyncId() {
+    let id = localStorage.getItem(SYNC_ID_KEY);
+    if (!id) {
+      const r = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+      id = `CAD-${r()}-${r()}`;
+      localStorage.setItem(SYNC_ID_KEY, id);
+    }
+    return id.toUpperCase().trim();
+  },
+
+  setSyncId(id) {
+    if (id) {
+      localStorage.setItem(SYNC_ID_KEY, id.toUpperCase().trim());
+      this.updateUi();
+    }
+  },
+
+  getEndpoint() {
+    return localStorage.getItem(CLOUD_ENDPOINT_KEY) || DEFAULT_CLOUD_URL;
+  },
+
+  getToken() {
+    return localStorage.getItem(CLOUD_TOKEN_KEY) || DEFAULT_CLOUD_TOKEN;
+  },
+
+  setUiStatus(status, text = null) {
+    const pill = document.getElementById('cloud-sync-pill');
+    const pillText = document.getElementById('cloud-sync-text');
+    const statusDesc = document.getElementById('cfg-sync-status-desc');
+    const syncTime = document.getElementById('cfg-sync-time');
+
+    if (!pill) return;
+    pill.classList.remove('syncing', 'offline');
+
+    if (status === 'syncing') {
+      pill.classList.add('syncing');
+      if (pillText) pillText.textContent = text || 'Sincronizando…';
+      if (statusDesc) {
+        statusDesc.innerHTML = `<span class="sync-status-indicator syncing">●</span> Enviando alterações para a nuvem…`;
+      }
+    } else if (status === 'offline') {
+      pill.classList.add('offline');
+      if (pillText) pillText.textContent = text || 'Nuvem offline';
+      if (statusDesc) {
+        statusDesc.innerHTML = `<span class="sync-status-indicator" style="color:var(--text-muted);">○</span> Sem conexão com a nuvem (dados salvos localmente)`;
+      }
+    } else {
+      const last = localStorage.getItem(LAST_SYNC_KEY);
+      let timeStr = 'Agora';
+      if (last) {
+        const d = new Date(parseInt(last));
+        timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      }
+      if (pillText) pillText.textContent = text || 'Sincronizado';
+      if (syncTime) syncTime.textContent = `Última: ${timeStr}`;
+      if (statusDesc) {
+        statusDesc.innerHTML = `<span class="sync-status-indicator online">●</span> Cofre sincronizado com a nuvem · <span id="cfg-sync-time">Última: ${timeStr}</span>`;
+      }
+    }
+  },
+
+  async pushVault(force = false) {
+    if (!derivedKey) return;
+    const authMeta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+    const encData  = localStorage.getItem(STORAGE_KEY);
+    if (!authMeta || !encData) return;
+
+    const syncId   = this.getSyncId();
+    const endpoint = this.getEndpoint();
+    const token    = this.getToken();
+
+    const payload = {
+      syncId,
+      authMeta,
+      encData,
+      updatedAt: Date.now(),
+      version: APP_VERSION,
+    };
+
+    this.setUiStatus('syncing');
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(['SET', `caderneta:vault:${syncId}`, JSON.stringify(payload)]),
+      });
+
+      if (res.ok) {
+        localStorage.setItem(LAST_SYNC_KEY, payload.updatedAt.toString());
+        this.setUiStatus('online');
+      } else {
+        this.setUiStatus('offline');
+      }
+    } catch {
+      this.setUiStatus('offline');
+    }
+  },
+
+  debouncedPush() {
+    clearTimeout(this.pushTimer);
+    this.pushTimer = setTimeout(() => {
+      this.pushVault();
+    }, 1200);
+  },
+
+  async fetchVault(syncId) {
+    const cleanId = (syncId || '').toUpperCase().trim();
+    if (!cleanId) return null;
+
+    const endpoint = this.getEndpoint();
+    const token    = this.getToken();
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(['GET', `caderneta:vault:${cleanId}`]),
+      });
+
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data || !data.result) return null;
+      return JSON.parse(data.result);
+    } catch {
+      return null;
+    }
+  },
+
+  async connectWallet(syncId, pin) {
+    const cleanId = (syncId || '').toUpperCase().trim();
+    if (!cleanId) return { success: false, error: 'ID de sincronização inválido.' };
+    if (!pin || pin.length < 4) return { success: false, error: 'PIN muito curto.' };
+
+    const vault = await this.fetchVault(cleanId);
+    if (!vault || !vault.authMeta || !vault.encData) {
+      return { success: false, error: 'Carteira não encontrada na nuvem com este ID.' };
+    }
+
+    // Validação do hash do PIN
+    const expectedHash = hashPin(pin, vault.authMeta.salt);
+    if (expectedHash !== vault.authMeta.verifyHash) {
+      return { success: false, error: 'PIN incorreto para esta carteira.' };
+    }
+
+    // Deriva chave AES e decifra dados
+    const key = deriveKey(pin, vault.authMeta.salt);
+    const decrypted = decryptState(vault.encData, key);
+    if (!decrypted) {
+      return { success: false, error: 'Erro ao decifrar cofre com este PIN.' };
+    }
+
+    // Salva estado sincronizado localmente
+    localStorage.setItem(SYNC_ID_KEY, cleanId);
+    localStorage.setItem(AUTH_KEY, JSON.stringify(vault.authMeta));
+    localStorage.setItem(STORAGE_KEY, vault.encData);
+    localStorage.setItem(LAST_SYNC_KEY, (vault.updatedAt || Date.now()).toString());
+
+    derivedKey = key;
+    state = { portfolio: [], watchlist: [], best: JSON.parse(JSON.stringify(DEFAULT_BEST)), ...decrypted };
+    if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
+      state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+    }
+    saveAuthAttempts({});
+    return { success: true };
+  },
+
+  async checkBackgroundSync() {
+    if (!derivedKey) return;
+    const syncId = this.getSyncId();
+    const lastLocalSync = parseInt(localStorage.getItem(LAST_SYNC_KEY) || '0');
+
+    try {
+      const vault = await this.fetchVault(syncId);
+      if (!vault) {
+        // Enviar cofre local para inicializar na nuvem
+        await this.pushVault(true);
+        return;
+      }
+
+      // Se a nuvem tiver atualização mais recente que o local (+3s tolerância)
+      if (vault.updatedAt && vault.updatedAt > (lastLocalSync + 3000)) {
+        const meta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+        if (meta && derivedKey) {
+          const decrypted = decryptState(vault.encData, derivedKey);
+          if (decrypted) {
+            state = { portfolio: [], watchlist: [], best: JSON.parse(JSON.stringify(DEFAULT_BEST)), ...decrypted };
+            if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
+              state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+            }
+            localStorage.setItem(STORAGE_KEY, vault.encData);
+            localStorage.setItem(LAST_SYNC_KEY, vault.updatedAt.toString());
+            renderAll();
+            showToast('Dados sincronizados com a nuvem.', 'info');
+          }
+        }
+      } else {
+        // Sincronizar cofre local com a nuvem
+        await this.pushVault();
+      }
+    } catch {
+      // Ignora erro em background
+    }
+  },
+
+  updateUi() {
+    const syncId = this.getSyncId();
+    const cfgSyncEl = document.getElementById('cfg-sync-id');
+    const qrModalEl = document.getElementById('qr-modal-sync-id');
+    if (cfgSyncEl) cfgSyncEl.textContent = syncId;
+    if (qrModalEl) qrModalEl.textContent = syncId;
+    this.setUiStatus('online');
+  }
+};
+
+/* ─── Alternador de Modo de Login ────────────────────────── */
+function switchLoginMode(mode) {
+  const tabPin   = document.getElementById('tab-login-pin');
+  const tabSync  = document.getElementById('tab-login-sync');
+  const formPin  = document.getElementById('login-form');
+  const formSync = document.getElementById('sync-connect-form');
+  const errSync  = document.getElementById('sync-connect-error');
+
+  if (errSync) errSync.style.display = 'none';
+
+  if (mode === 'sync') {
+    if (tabPin)  tabPin.classList.remove('active');
+    if (tabSync) tabSync.classList.add('active');
+    if (formPin) formPin.style.display = 'none';
+    if (formSync) {
+      formSync.style.display = 'block';
+      setTimeout(() => document.getElementById('sync-input-id')?.focus(), 50);
+    }
+  } else {
+    if (tabSync) tabSync.classList.remove('active');
+    if (tabPin)  tabPin.classList.add('active');
+    if (formSync) formSync.style.display = 'none';
+    if (formPin) {
+      formPin.style.display = 'block';
+      setTimeout(() => document.getElementById('login-pin')?.focus(), 50);
+    }
+  }
+}
+
 /* ─── Login Flow ─────────────────────────────────────────── */
 function initLoginScreen() {
   const meta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
@@ -176,6 +439,19 @@ function initLoginScreen() {
 
   if (isBlocked()) {
     showBlockedUI();
+  }
+
+  // Detecta link de pareamento na URL (#sync=CAD-XXXX-XXXX)
+  if (window.location.hash) {
+    const match = window.location.hash.match(/sync=([A-Za-z0-9-]+)/i);
+    if (match && match[1]) {
+      const syncId = match[1].toUpperCase();
+      switchLoginMode('sync');
+      const inputId = document.getElementById('sync-input-id');
+      if (inputId) inputId.value = syncId;
+      setTimeout(() => document.getElementById('sync-input-pin')?.focus(), 100);
+      showToast(`ID de Sincronização detectado: ${syncId}`, 'info');
+    }
   }
 }
 
@@ -267,6 +543,49 @@ document.getElementById('login-form').addEventListener('submit', async function(
   btn.disabled = false; btn.textContent = 'Entrar';
 });
 
+/* Formulário de Conexão com Carteira da Nuvem */
+document.getElementById('sync-connect-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const syncId = (document.getElementById('sync-input-id').value || '').trim().toUpperCase();
+  const pin    = document.getElementById('sync-input-pin').value;
+  const errEl  = document.getElementById('sync-connect-error');
+  const btn    = document.getElementById('sync-connect-btn');
+
+  errEl.style.display = 'none';
+
+  if (!syncId || syncId.length < 5) {
+    errEl.textContent = 'Informe um ID de sincronização válido (ex: CAD-XXXX-YYYY).';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!pin || pin.length < 4) {
+    errEl.textContent = 'PIN deve ter pelo menos 4 caracteres.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = `<svg class="spinning" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg> Conectando ao cofre…`;
+
+  try {
+    const res = await SyncService.connectWallet(syncId, pin);
+    if (res.success) {
+      showToast('Carteira conectada e sincronizada com sucesso!', 'success');
+      openApp();
+    } else {
+      errEl.textContent = res.error || 'Erro ao conectar à carteira.';
+      errEl.style.display = 'block';
+    }
+  } catch (err) {
+    errEl.textContent = 'Erro ao conectar ao servidor da nuvem.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Conectar e Sincronizar`;
+  }
+});
+
 function showLoginError(msg) {
   const el = document.getElementById('login-error');
   el.textContent = msg;
@@ -287,6 +606,8 @@ function openApp() {
   initExplorer();
   refreshAllQuotes();
   refreshBestQuotes();
+  SyncService.updateUi();
+  SyncService.checkBackgroundSync();
 }
 
 function handleLogout() {
@@ -297,6 +618,7 @@ function handleLogout() {
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-pin').value = '';
+  document.getElementById('sync-input-pin').value = '';
   document.getElementById('login-error').classList.remove('show');
   clearTimeout(sessionTimer);
 }
@@ -351,7 +673,10 @@ document.getElementById('change-pin-form').addEventListener('submit', async func
 function saveEncryptedState() {
   if (!derivedKey) return;
   const enc = encryptState(derivedKey);
-  if (enc) localStorage.setItem(STORAGE_KEY, enc);
+  if (enc) {
+    localStorage.setItem(STORAGE_KEY, enc);
+    SyncService.debouncedPush();
+  }
 }
 
 /* ─── Cotações Base de Fechamento (Último Fechamento da B3 / Fallback) ─ */
@@ -1774,6 +2099,119 @@ function escapeHtml(str) {
 
 function escapeAttr(str) {
   return String(str || '').replace(/'/g, "\\'");
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HELPERS DE SINCRONIZAÇÃO & QR CODE
+   ═══════════════════════════════════════════════════════════ */
+
+function copySyncId() {
+  const syncId = SyncService.getSyncId();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(syncId).then(() => {
+      showToast(`ID copiado: ${syncId}`, 'success');
+    }).catch(() => {
+      prompt('Copie seu ID de Sincronização:', syncId);
+    });
+  } else {
+    prompt('Copie seu ID de Sincronização:', syncId);
+  }
+}
+
+function copySyncPairingLink() {
+  const syncId = SyncService.getSyncId();
+  const base = window.location.href.split('#')[0];
+  const url = `${base}#sync=${syncId}`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('Link de pareamento copiado!', 'success');
+    }).catch(() => {
+      prompt('Copie o link direto de pareamento:', url);
+    });
+  } else {
+    prompt('Copie o link direto de pareamento:', url);
+  }
+}
+
+let qrcodeInstance = null;
+function openSyncQrModal() {
+  const syncId = SyncService.getSyncId();
+  SyncService.updateUi();
+
+  const container = document.getElementById('sync-qrcode-container');
+  if (container) {
+    container.innerHTML = '';
+    const base = window.location.href.split('#')[0];
+    const url = `${base}#sync=${syncId}`;
+    if (typeof QRCode !== 'undefined') {
+      qrcodeInstance = new QRCode(container, {
+        text: url,
+        width: 170,
+        height: 170,
+        colorDark: '#0d1117',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    } else {
+      container.innerHTML = `<p style="font-size:0.75rem;color:var(--text-muted);padding:20px;">Use o ID: <strong>${syncId}</strong></p>`;
+    }
+  }
+
+  openModal('modal-sync-qr');
+}
+
+function openCloudModal() {
+  const epInput = document.getElementById('cloud-cfg-endpoint');
+  const tkInput = document.getElementById('cloud-cfg-token');
+  if (epInput) epInput.value = SyncService.getEndpoint();
+  if (tkInput) tkInput.value = SyncService.getToken();
+  openModal('modal-cloud-config');
+}
+
+async function forceCloudSync() {
+  const btn = document.getElementById('btn-force-sync');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="spinning" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg> Sincronizando…`;
+  }
+
+  try {
+    await SyncService.checkBackgroundSync();
+    showToast('Sincronização concluída com sucesso!', 'success');
+  } catch {
+    showToast('Erro ao sincronizar com a nuvem.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg> Sincronizar Agora`;
+    }
+  }
+}
+
+function restoreDefaultCloudConfig() {
+  localStorage.removeItem(CLOUD_ENDPOINT_KEY);
+  localStorage.removeItem(CLOUD_TOKEN_KEY);
+  const epInput = document.getElementById('cloud-cfg-endpoint');
+  const tkInput = document.getElementById('cloud-cfg-token');
+  if (epInput) epInput.value = DEFAULT_CLOUD_URL;
+  if (tkInput) tkInput.value = DEFAULT_CLOUD_TOKEN;
+  showToast('Configuração padrão da nuvem restaurada.', 'info');
+}
+
+async function saveCustomCloudConfig() {
+  const ep = (document.getElementById('cloud-cfg-endpoint')?.value || '').trim();
+  const tk = (document.getElementById('cloud-cfg-token')?.value || '').trim();
+
+  if (!ep || !tk) {
+    showToast('Preencha o Endpoint e o Token.', 'error');
+    return;
+  }
+
+  localStorage.setItem(CLOUD_ENDPOINT_KEY, ep);
+  localStorage.setItem(CLOUD_TOKEN_KEY, tk);
+  closeModal('modal-cloud-config');
+  showToast('Configuração salva. Testando sincronização…', 'info');
+  await SyncService.pushVault(true);
 }
 
 /* ═══════════════════════════════════════════════════════════

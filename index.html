@@ -20,6 +20,9 @@
   <!-- crypto-js SÍNCRONO para AES-256 + PBKDF2 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 
+  <!-- QRCode.js para pareamento visual entre dispositivos -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -42,6 +45,18 @@
       </div>
     </div>
 
+    <!-- Alternador: Login Local vs Conectar Carteira Existente -->
+    <div class="login-mode-tabs" id="login-mode-tabs">
+      <button type="button" id="tab-login-pin" class="login-mode-btn active" onclick="switchLoginMode('pin')">
+        Entrar com PIN
+      </button>
+      <button type="button" id="tab-login-sync" class="login-mode-btn" onclick="switchLoginMode('sync')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+        Conectar Carteira (Nuvem)
+      </button>
+    </div>
+
+    <!-- Formulário 1: Login com PIN Local -->
     <form class="login-form" id="login-form" autocomplete="off">
       <div class="form-group">
         <label class="login-label" for="login-pin">PIN de Acesso</label>
@@ -60,10 +75,35 @@
       <div class="login-attempts" id="login-attempts-info"></div>
     </form>
 
+    <!-- Formulário 2: Conectar Carteira Existente do Celular / PC via Sync ID -->
+    <form class="login-form" id="sync-connect-form" autocomplete="off" style="display:none;">
+      <div class="form-group">
+        <label class="login-label" for="sync-input-id">ID de Sincronização (Sync ID)</label>
+        <input type="text" id="sync-input-id" class="login-input"
+          placeholder="Ex: CAD-9A2F-4B81"
+          style="font-family:var(--font-mono);letter-spacing:0.08em;text-transform:uppercase;"
+          autocomplete="off">
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
+          Encontrado no celular em: <em>Ajustes &gt; Sincronização</em>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="login-label" for="sync-input-pin">PIN da Carteira</label>
+        <input type="password" id="sync-input-pin" class="login-input"
+          placeholder="Digite a mesma senha/PIN do celular"
+          maxlength="32" autocomplete="current-password">
+      </div>
+      <div id="sync-connect-error" class="login-error"></div>
+      <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:9px 14px;" id="sync-connect-btn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Conectar e Sincronizar
+      </button>
+    </form>
+
     <div class="login-hint">
-      🔒 Seus dados ficam cifrados com AES-256 no seu dispositivo.<br>
+      🔒 Criptografia Zero-Knowledge AES-256 de ponta a ponta.<br>
       <span id="first-access-msg" style="display:none; color: var(--accent-green);">
-        Primeiro acesso: defina seu PIN acima.
+        Primeiro acesso: defina seu PIN acima ou conecte uma carteira existente.
       </span>
     </div>
   </div>
@@ -107,6 +147,10 @@
     </nav>
 
     <div class="header-actions">
+      <div id="cloud-sync-pill" class="cloud-sync-pill" onclick="openSyncQrModal()" title="Status da sincronização em nuvem · Clique para ver detalhes e QR Code">
+        <span class="sync-dot"></span>
+        <span id="cloud-sync-text">Nuvem Ativa</span>
+      </div>
       <button id="btn-sync-quotes" class="btn-icon" onclick="refreshAllQuotes()" title="Atualizar cotações">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
       </button>
@@ -295,6 +339,58 @@
          VIEW: CONFIGURAÇÕES & BACKUP
          ══════════════════════════════════════════════════════════ -->
     <section id="view-config" class="view-section">
+
+      <!-- Grupo: Sincronização em Nuvem (Multi-Dispositivo) -->
+      <div class="config-group" style="border: 1px solid rgba(88, 166, 255, 0.25); background: linear-gradient(180deg, rgba(56, 139, 253, 0.04) 0%, rgba(22, 27, 34, 0.6) 100%);">
+        <div class="config-group-title" style="color: var(--accent-blue);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+          Sincronização em Nuvem (Celular &amp; PC)
+          <span class="badge badge-success" style="font-size:0.65rem;margin-left:auto;">AES-256 Ponta a Ponta</span>
+        </div>
+
+        <div class="config-item">
+          <div class="config-info">
+            <span class="config-label">ID da sua Carteira (Sync ID)</span>
+            <span class="config-desc">Use este ID no computador com o seu mesmo PIN para sincronizar todos os seus dados.</span>
+            <div class="sync-id-box">
+              <span id="cfg-sync-id" class="sync-id-code">CAD-....-....</span>
+              <button type="button" class="btn-xs-copy" onclick="copySyncId()" title="Copiar ID">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar
+              </button>
+              <button type="button" class="btn-xs-qr" onclick="openSyncQrModal()" title="Exibir QR Code para escanear">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                QR Code
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-item">
+          <div class="config-info">
+            <span class="config-label">Status da Conexão</span>
+            <span class="config-desc" id="cfg-sync-status-desc">
+              <span class="sync-status-indicator online">●</span> Cofre sincronizado com a nuvem · <span id="cfg-sync-time">Atualizado</span>
+            </span>
+          </div>
+          <button class="btn-secondary" id="btn-force-sync" onclick="forceCloudSync()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+            Sincronizar Agora
+          </button>
+        </div>
+
+        <div class="config-item">
+          <div class="config-info">
+            <span class="config-label">Segurança &amp; Servidor</span>
+            <span class="config-desc">Cofre Cifrado Zero-Knowledge. Seus dados nunca trafegam em aberto.</span>
+          </div>
+          <button class="btn-secondary" onclick="openCloudModal()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Nuvem
+          </button>
+        </div>
+      </div>
+
       <div class="config-group">
         <div class="config-group-title">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -579,6 +675,85 @@
     <div class="modal-footer">
       <button class="btn-secondary" onclick="closeModal('modal-best-edit')">Cancelar</button>
       <button class="btn-primary" onclick="saveBestEdit()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MODAL: QR CODE DE PAREAMENTO (CELULAR / PC)
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="modal-sync-qr" class="modal-overlay">
+  <div class="modal-card" style="max-width:400px; text-align:center;">
+    <div class="modal-header">
+      <h3 class="modal-title">🔗 Parear Celular &amp; PC</h3>
+      <button class="modal-close-btn" onclick="closeModal('modal-sync-qr')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    
+    <div style="display:flex; flex-direction:column; align-items:center; gap:14px; padding:12px 0;">
+      <!-- QR Code Container -->
+      <div id="sync-qrcode-container" class="sync-qrcode-container"></div>
+
+      <!-- Sync ID Tag -->
+      <div class="sync-id-badge-wrap">
+        <span style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">ID da Carteira:</span>
+        <strong id="qr-modal-sync-id" class="sync-id-code">CAD-....-....</strong>
+        <button type="button" class="btn-xs-copy" onclick="copySyncId()" title="Copiar ID">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar
+        </button>
+      </div>
+
+      <p style="font-size:0.78rem;color:var(--text-secondary);line-height:1.45;margin:0 10px;text-align:left;">
+        <strong>Passo a passo no computador:</strong><br>
+        1. Abra o site no PC.<br>
+        2. Clique na aba <em>"Conectar Carteira (Nuvem)"</em>.<br>
+        3. Digite o ID acima e o seu <strong>mesmo PIN</strong>.
+      </p>
+
+      <div style="width:100%;padding:0 8px;">
+        <button type="button" class="btn-secondary" style="width:100%;justify-content:center;font-size:0.75rem;" onclick="copySyncPairingLink()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Copiar Link com ID Preenchido
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MODAL: CONFIGURAÇÃO DE NUVEM
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="modal-cloud-config" class="modal-overlay">
+  <div class="modal-card" style="max-width:460px;">
+    <div class="modal-header">
+      <h3 class="modal-title">☁️ Servidor da Nuvem</h3>
+      <button class="modal-close-btn" onclick="closeModal('modal-cloud-config')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    
+    <div style="display:flex; flex-direction:column; gap:12px; padding:10px 0; font-size:0.8rem; color:var(--text-secondary);">
+      <div style="background:rgba(56, 139, 253, 0.08);border:1px solid rgba(56, 139, 253, 0.2);border-radius:var(--radius-sm);padding:10px;line-height:1.4;">
+        🔒 <strong>Cofre Cego (Zero-Knowledge):</strong><br>
+        Todos os dados são cifrados no seu aparelho com chave AES-256 derivada do seu PIN antes de serem enviados. Mesmo na nuvem, os dados são indecifráveis sem a sua senha.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Endpoint do Banco de Dados</label>
+        <input type="text" id="cloud-cfg-endpoint" class="form-input" style="font-family:var(--font-mono);font-size:0.75rem;">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Token de Autorização (Bearer)</label>
+        <input type="password" id="cloud-cfg-token" class="form-input" style="font-family:var(--font-mono);font-size:0.75rem;">
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px;">
+        <button type="button" class="btn-secondary" onclick="restoreDefaultCloudConfig()">Restaurar Padrão</button>
+        <button type="button" class="btn-primary" onclick="saveCustomCloudConfig()">Salvar e Testar</button>
+      </div>
     </div>
   </div>
 </div>
