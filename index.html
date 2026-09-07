@@ -75,16 +75,16 @@
       <div class="login-attempts" id="login-attempts-info"></div>
     </form>
 
-    <!-- Formulário 2: Conectar Carteira Existente do Celular / PC via Sync ID -->
+    <!-- Formulário 2: Conectar Carteira Existente do Celular / PC via Sync ID ou Link -->
     <form class="login-form" id="sync-connect-form" autocomplete="off" style="display:none;">
       <div class="form-group">
-        <label class="login-label" for="sync-input-id">ID de Sincronização (Sync ID)</label>
+        <label class="login-label" for="sync-input-id">ID de Sincronização ou Código do Cofre</label>
         <input type="text" id="sync-input-id" class="login-input"
-          placeholder="Ex: CAD-9A2F-4B81"
-          style="font-family:var(--font-mono);letter-spacing:0.08em;text-transform:uppercase;"
+          placeholder="Cole o Sync ID (CAD-...) ou Código do Cofre"
+          style="font-family:var(--font-mono);font-size:0.8rem;letter-spacing:0.04em;"
           autocomplete="off">
         <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-          Encontrado no celular em: <em>Ajustes &gt; Sincronização</em>
+          No celular: abra <em>Ajustes &gt; Parear</em> e copie o <strong>Link</strong> ou <strong>Código</strong>.
         </div>
       </div>
       <div class="form-group">
@@ -356,7 +356,11 @@
               <span id="cfg-sync-id" class="sync-id-code">CAD-....-....</span>
               <button type="button" class="btn-xs-copy" onclick="copySyncId()" title="Copiar ID">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copiar
+                ID
+              </button>
+              <button type="button" class="btn-xs-copy" onclick="copySyncPairingLink()" title="Copiar Link de Acesso com Carteira">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                Link
               </button>
               <button type="button" class="btn-xs-qr" onclick="openSyncQrModal()" title="Exibir QR Code para escanear">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -712,10 +716,14 @@
         3. Digite o ID acima e o seu <strong>mesmo PIN</strong>.
       </p>
 
-      <div style="width:100%;padding:0 8px;">
-        <button type="button" class="btn-secondary" style="width:100%;justify-content:center;font-size:0.75rem;" onclick="copySyncPairingLink()">
+      <div style="width:100%;padding:0 8px;display:flex;flex-direction:column;gap:8px;">
+        <button type="button" class="btn-primary" style="width:100%;justify-content:center;font-size:0.75rem;" onclick="copySyncPairingLink()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          Copiar Link com ID Preenchido
+          Copiar Link de Acesso com Carteira
+        </button>
+        <button type="button" class="btn-secondary" style="width:100%;justify-content:center;font-size:0.75rem;" onclick="copyVaultCode()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar Código do Cofre
         </button>
       </div>
     </div>
