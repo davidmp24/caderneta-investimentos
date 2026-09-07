@@ -170,16 +170,30 @@
       <!-- Widget Best -->
       <div class="widget-section" id="widget-best">
         <div class="widget-header">
-          <div class="widget-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-            Best — Seleção Pessoal
+          <div class="widget-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              Best — Seleção Pessoal
+            </div>
+            <span id="market-status-badge" class="market-status-badge closed" title="Horário B3: Seg a Sex, 10h às 18h (Brasília)">
+              <span class="status-dot"></span>
+              <span id="market-status-text">Mercado Fechado • Último Fechamento</span>
+            </span>
           </div>
-          <button class="btn-view-all" onclick="openBestEditModal()" style="color:var(--accent-yellow);border-color:rgba(227,179,65,.3);background:rgba(227,179,65,.08);">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            Editar lista
-          </button>
+          <div class="widget-actions" style="display:flex;align-items:center;gap:6px;">
+            <button class="btn-scroll-nav" onclick="scrollBestList(-280)" title="Rolar para a esquerda" aria-label="Rolar para esquerda">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button class="btn-scroll-nav" onclick="scrollBestList(280)" title="Rolar para a direita" aria-label="Rolar para direita">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button class="btn-view-all" onclick="openBestEditModal()" style="color:var(--accent-yellow);border-color:rgba(227,179,65,.3);background:rgba(227,179,65,.08);">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Editar lista
+            </button>
+          </div>
         </div>
-        <div id="best-scroll" class="favoritos-scroll">
+        <div id="best-scroll" class="favoritos-scroll" title="Arraste ou use os botões para rolar a lista">
           <!-- Renderizado via JS -->
         </div>
       </div>

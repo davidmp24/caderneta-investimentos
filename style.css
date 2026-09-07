@@ -513,11 +513,34 @@ main {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding-bottom: 6px;
-  scrollbar-width: none;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scroll-behavior: smooth;
+  cursor: grab;
 }
 
-.favoritos-scroll::-webkit-scrollbar { display: none; }
+.favoritos-scroll:active, .favoritos-scroll.grabbing {
+  cursor: grabbing;
+}
+
+.favoritos-scroll::-webkit-scrollbar {
+  height: 5px;
+}
+
+.favoritos-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.favoritos-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+}
+
+.favoritos-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(227, 179, 65, 0.45);
+}
 
 .fav-card {
   flex-shrink: 0;
@@ -1519,4 +1542,106 @@ main {
 .best-suggestion-item:hover { border-color: var(--accent-blue); background: var(--accent-blue-dim); }
 .best-suggestion-ticker { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); }
 .best-suggestion-name   { font-size: 0.72rem; color: var(--text-secondary); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ==========================================================================
+   MERCADO B3 STATUS & NAVEGAÇÃO BEST
+   ========================================================================== */
+
+.market-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: all var(--ease-fast);
+}
+
+.market-status-badge.closed {
+  background: rgba(139, 148, 158, 0.12);
+  color: var(--text-secondary);
+  border: 1px solid rgba(139, 148, 158, 0.25);
+}
+
+.market-status-badge.open {
+  background: rgba(63, 185, 80, 0.12);
+  color: var(--accent-green);
+  border: 1px solid rgba(63, 185, 80, 0.3);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.market-status-badge.closed .status-dot {
+  background: var(--text-muted);
+}
+
+.market-status-badge.open .status-dot {
+  background: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green);
+  animation: pulseDot 2s infinite ease-in-out;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.btn-scroll-nav {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--ease-fast);
+}
+
+.btn-scroll-nav:hover {
+  color: var(--accent-yellow);
+  border-color: rgba(227, 179, 65, 0.4);
+  background: var(--bg-card-hover);
+}
+
+.btn-scroll-nav:active {
+  transform: scale(0.94);
+}
+
+.best-market-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 3px;
+}
+
+.best-badge-status {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+.best-badge-status.closed {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.best-badge-status.open {
+  color: var(--accent-green);
+  background: rgba(63, 185, 80, 0.1);
+  border: 1px solid rgba(63, 185, 80, 0.2);
+}
 

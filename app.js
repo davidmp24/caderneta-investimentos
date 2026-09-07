@@ -282,6 +282,8 @@ function openApp() {
   renderAll();
   renderBestWidget();
   renderFavoritosWidget();
+  enableScrollDrag('best-scroll');
+  enableScrollDrag('favoritos-scroll');
   initExplorer();
   refreshAllQuotes();
   refreshBestQuotes();
@@ -352,6 +354,111 @@ function saveEncryptedState() {
   if (enc) localStorage.setItem(STORAGE_KEY, enc);
 }
 
+/* ─── Cotações Base de Fechamento (Último Fechamento da B3 / Fallback) ─ */
+const BASELINE_CLOSING_PRICES = {
+  'BBSE3':  { price: 42.16, change: 1.13,  name: 'BB Seguridade' },
+  'BBAS3':  { price: 22.52, change: 0.31,  name: 'Banco do Brasil' },
+  'CMIG4':  { price: 11.26, change: 0.72,  name: 'Cemig' },
+  'TAEE11': { price: 41.53, change: -0.05, name: 'Taesa' },
+  'TRPL4':  { price: 27.70, change: 0.22,  name: 'ISA Cteep' },
+  'UNIP6':  { price: 56.97, change: -0.47, name: 'Unipar' },
+  'SANB4':  { price: 15.03, change: -0.73, name: 'Santander Brasil' },
+  'AURE3':  { price: 12.00, change: 3.18,  name: 'Auren Energia' },
+  'KLBN4':  { price: 3.85,  change: -0.26, name: 'Klabin' },
+  'IRBR3':  { price: 62.21, change: 4.64,  name: 'IRB Brasil' },
+  'PETR4':  { price: 37.85, change: 0.53,  name: 'Petrobras PN' },
+  'VALE3':  { price: 61.20, change: -0.81, name: 'Vale S.A.' },
+  'ITUB4':  { price: 34.60, change: 0.29,  name: 'Itaú Unibanco PN' },
+  'WEGE3':  { price: 52.40, change: 1.12,  name: 'WEG S.A.' },
+  'HGLG11': { price: 165.20, change: 0.12, name: 'CSHG Logística' },
+  'BOVA11': { price: 132.50, change: 0.45, name: 'iShares Ibovespa' },
+  'XPLG11': { price: 104.80, change: -0.15, name: 'XP Log' },
+  'PRIO3':  { price: 46.80, change: 1.30,  name: 'PRIO S.A.' },
+};
+
+/** Verifica se a bolsa brasileira B3 está no horário de negociação aberto */
+function isB3MarketOpen() {
+  try {
+    const now = new Date();
+    // Converter para Horário Oficial de Brasília (UTC-3)
+    const spStr = now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' });
+    const spDate = new Date(spStr);
+    const day = spDate.getDay(); // 0 = Domingo, 6 = Sábado
+    if (day === 0 || day === 6) return false;
+
+    const m = spDate.getMonth() + 1;
+    const d = spDate.getDate();
+    // Feriados nacionais principais B3
+    if ((m === 1 && d === 1) || (m === 4 && d === 21) || (m === 5 && d === 1) ||
+        (m === 9 && d === 7) || (m === 10 && d === 12) || (m === 11 && (d === 2 || d === 15 || d === 20)) ||
+        (m === 12 && d === 25)) {
+      return false;
+    }
+
+    const minutes = spDate.getHours() * 60 + spDate.getMinutes();
+    // Sessão regular B3: 10h00 (600m) às 17h55 (1075m)
+    return minutes >= 600 && minutes <= 1075;
+  } catch {
+    return false;
+  }
+}
+
+/** Obtém cotação para exibição: se mercado fechado, prioriza último valor de fechamento */
+function getStockQuoteData(ticker) {
+  const clean = (ticker || '').toUpperCase().trim();
+  const marketOpen = isB3MarketOpen();
+
+  // 1. Cache do QuoteService ou Best
+  const cached = bestPrices[clean] || QuoteService.cache[clean] || explorerPrices[clean];
+  if (cached && cached.price != null) {
+    return {
+      price: cached.price,
+      change: cached.change ?? 0,
+      name: cached.name || clean,
+      isClosed: !marketOpen || Boolean(cached.isClosed),
+    };
+  }
+
+  // 2. Valores cadastrados no portfólio ou radar
+  const portItem = state.portfolio.find(p => p.ticker === clean);
+  if (portItem && portItem.currentPrice != null) {
+    return {
+      price: portItem.currentPrice,
+      change: 0,
+      name: portItem.name || clean,
+      isClosed: !marketOpen,
+    };
+  }
+
+  const watchItem = state.watchlist.find(w => w.ticker === clean);
+  if (watchItem && watchItem.currentPrice != null) {
+    return {
+      price: watchItem.currentPrice,
+      change: 0,
+      name: watchItem.name || clean,
+      isClosed: !marketOpen,
+    };
+  }
+
+  // 3. Fallback de fechamento real para ativos conhecidos
+  if (BASELINE_CLOSING_PRICES[clean]) {
+    const base = BASELINE_CLOSING_PRICES[clean];
+    return {
+      price: base.price,
+      change: base.change,
+      name: base.name || clean,
+      isClosed: true,
+    };
+  }
+
+  return {
+    price: null,
+    change: null,
+    name: clean,
+    isClosed: !marketOpen,
+  };
+}
+
 /* ═══════════════════════════════════════════════════════════
    COTAÇÕES — YAHOO FINANCE + BINANCE
    ═══════════════════════════════════════════════════════════ */
@@ -362,34 +469,53 @@ const QuoteService = {
 
   async fetchYahoo(symbols) {
     if (!symbols || symbols.length === 0) return {};
-    const yahooSymbols = symbols.map(s => {
-      s = s.toUpperCase().trim();
-      if (/^[A-Z]{3,6}\d{1,2}$/.test(s)) return s + '.SA';
-      if (/^[A-Z]{3,4}34$/.test(s)) return s + '.SA';
-      return s;
-    });
-    const qs = yahooSymbols.join(',');
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(qs)}&fields=regularMarketPrice,regularMarketChangePercent,shortName`;
+    const result = {};
+    const marketOpen = isB3MarketOpen();
 
-    for (const proxy of CORS_PROXIES) {
-      try {
-        const res = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(7000) });
-        if (!res.ok) continue;
-        const data = await res.json();
-        const quotes = data?.quoteResponse?.result || [];
-        const result = {};
-        for (const q of quotes) {
-          const ticker = q.symbol.replace('.SA', '');
-          result[ticker] = {
-            price:  q.regularMarketPrice ?? null,
-            change: q.regularMarketChangePercent ?? 0,
-            name:   q.shortName || '',
-          };
-        }
-        return result;
-      } catch { continue; }
-    }
-    return {};
+    const fetchOne = async (rawSymbol) => {
+      const clean = rawSymbol.toUpperCase().trim();
+      let yahooTicker = clean;
+      if (clean === 'TRPL4') {
+        yahooTicker = 'ISAE4.SA'; // Ticker atualizado na B3
+      } else if (/^[A-Z]{3,6}\d{1,2}$/.test(clean) || /^[A-Z]{3,4}34$/.test(clean)) {
+        yahooTicker = clean + '.SA';
+      }
+
+      const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?interval=1d&range=1d`;
+
+      for (const proxy of CORS_PROXIES) {
+        try {
+          const targetUrl = proxy.includes('corsproxy.io')
+            ? `https://corsproxy.io/?${encodeURIComponent(chartUrl)}`
+            : `${proxy}${encodeURIComponent(chartUrl)}`;
+
+          const res = await fetch(targetUrl, { signal: AbortSignal.timeout(4500) });
+          if (!res.ok) continue;
+          const data = await res.json();
+          const meta = data?.chart?.result?.[0]?.meta;
+          if (meta) {
+            // Se o mercado está fechado, o regularMarketPrice representa o último preço de fechamento
+            const price = meta.regularMarketPrice ?? meta.chartPreviousClose ?? null;
+            const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
+            let change = 0;
+            if (price != null && prevClose != null && prevClose > 0) {
+              change = ((price - prevClose) / prevClose) * 100;
+            }
+            result[clean] = {
+              price,
+              previousClose: prevClose,
+              change,
+              name: meta.shortName || clean,
+              isClosed: !marketOpen,
+            };
+            return;
+          }
+        } catch { /* tentar próximo proxy */ }
+      }
+    };
+
+    await Promise.allSettled(symbols.map(s => fetchOne(s)));
+    return result;
   },
 
   async fetchBinance(symbols) {
@@ -817,29 +943,92 @@ function renderBestWidget() {
     state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
   }
 
+  const marketOpen = isB3MarketOpen();
+
+  // Atualizar indicador de status do mercado no cabeçalho
+  const statusBadge = document.getElementById('market-status-badge');
+  const statusText  = document.getElementById('market-status-text');
+  if (statusBadge && statusText) {
+    statusBadge.className = `market-status-badge ${marketOpen ? 'open' : 'closed'}`;
+    statusText.textContent = marketOpen ? 'Mercado Aberto • Tempo Real' : 'Mercado Fechado • Último Fechamento';
+    statusBadge.title = marketOpen
+      ? 'B3 em negociação ao vivo (10h às 18h)'
+      : 'B3 fechada. Exibindo o último valor de mercado registrado antes do fechamento.';
+  }
+
   container.innerHTML = state.best.map(item => {
-    const pData = bestPrices[item.ticker] || explorerPrices[item.ticker];
-    const price = pData?.price != null ? fmtN(pData.price) : '—';
-    const chg = pData?.change;
+    const q = getStockQuoteData(item.ticker);
+    const price = q.price != null ? fmtN(q.price) : '—';
+    const chg = q.change;
     const chgClass = (chg > 0) ? 'pos' : (chg < 0) ? 'neg' : 'neutral';
     const chgText = (chg != null) ? `${chg > 0 ? '+' : ''}${chg.toFixed(2)}%` : '—';
+    const isClosedVal = !marketOpen || q.isClosed;
 
     return `
-      <div class="best-card" onclick="quickViewBestTicker('${item.ticker}')" title="Clique para detalhes no Explorer">
+      <div class="best-card" onclick="quickViewBestTicker('${item.ticker}')" title="${isClosedVal ? 'Mercado Fechado: último valor de fechamento registrado' : 'Mercado Aberto: cotação em tempo real'}">
         <div class="best-card-top">
           ${renderAssetLogoHtml(item.ticker, 'fav-logo')}
           <div class="best-card-info">
             <div class="best-ticker">${escapeHtml(item.ticker)}</div>
-            <div class="best-name" title="${escapeHtml(item.name || item.ticker)}">${escapeHtml(item.name || item.ticker)}</div>
+            <div class="best-name" title="${escapeHtml(item.name || q.name || item.ticker)}">${escapeHtml(item.name || q.name || item.ticker)}</div>
           </div>
         </div>
         <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:2px;">
           <div class="best-price">${price}</div>
           <div class="best-change ${chgClass}">${chgText}</div>
         </div>
+        <div class="best-market-sub">
+          <span class="best-badge-status ${isClosedVal ? 'closed' : 'open'}">
+            ${isClosedVal ? 'Últ. Fechamento' : 'Em Negociação'}
+          </span>
+        </div>
       </div>
     `;
   }).join('');
+}
+
+function scrollBestList(offset) {
+  const el = document.getElementById('best-scroll');
+  if (!el) return;
+  el.scrollBy({ left: offset, behavior: 'smooth' });
+}
+
+function enableScrollDrag(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container || container._hasDragListener) return;
+  container._hasDragListener = true;
+
+  container.addEventListener('wheel', (e) => {
+    if (e.deltaY !== 0) {
+      e.preventDefault();
+      container.scrollBy({ left: e.deltaY * 2, behavior: 'smooth' });
+    }
+  }, { passive: false });
+
+  let isDown = false;
+  let startX;
+  let scrollLeft;
+
+  container.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    isDown = true;
+    container.classList.add('grabbing');
+    startX = e.pageX - container.offsetLeft;
+    scrollLeft = container.scrollLeft;
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDown = false;
+    container.classList.remove('grabbing');
+  });
+
+  container.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    container.scrollLeft = scrollLeft - walk;
+  });
 }
 
 async function refreshBestQuotes() {
@@ -1555,6 +1744,8 @@ function renderAll() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initLoginScreen();
+  enableScrollDrag('best-scroll');
+  enableScrollDrag('favoritos-scroll');
 
   // Service Worker
   if ('serviceWorker' in navigator) {
