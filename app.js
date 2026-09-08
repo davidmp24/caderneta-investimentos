@@ -1028,6 +1028,7 @@ function switchTab(tab) {
   }
 
   if (tab === 'explorer') renderExplorerTable();
+  if (tab === 'reports')  renderReports();
   if (tab === 'carteira') {
     renderBestWidget();
     renderFavoritosWidget();
@@ -1038,6 +1039,139 @@ function switchTab(tab) {
 document.querySelectorAll('[data-tab]').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
+
+/* ═══════════════════════════════════════════════════════════
+   RELATÓRIOS
+   ═══════════════════════════════════════════════════════════ */
+function renderReports() {
+  const source     = document.getElementById('report-source')?.value || 'all';
+  const typeFilter = document.getElementById('report-type-filter')?.value || 'ALL';
+  const sortBy     = document.getElementById('report-sort')?.value || 'ticker';
+
+  // Montar lista unificada
+  let rows = [];
+
+  if (source !== 'watchlist') {
+    state.portfolio.forEach(a => {
+      const quote   = getStockQuoteData(a.ticker);
+      const qty     = parseFloat(a.quantity) || 0;
+      const avg     = parseFloat(a.avgPrice) || 0;
+      const cur     = a.currentPrice != null && parseFloat(a.currentPrice) > 0
+        ? parseFloat(a.currentPrice)
+        : (quote?.price ?? avg);
+      const totalInv = qty * avg;
+      const totalCur = qty * cur;
+      const plVal   = totalCur - totalInv;
+      const plPct   = totalInv > 0 ? (plVal / totalInv) * 100 : 0;
+      rows.push({
+        ticker: a.ticker, name: a.name || '', type: a.type,
+        qty, avg, cur, totalInv, totalCur, plVal, plPct,
+        targetPrice: null, rank: null, notes: a.notes || '',
+        source: 'Carteira',
+      });
+    });
+  }
+
+  if (source !== 'portfolio') {
+    state.watchlist.forEach(a => {
+      const quote = getStockQuoteData(a.ticker);
+      const cur   = a.currentPrice != null && parseFloat(a.currentPrice) > 0
+        ? parseFloat(a.currentPrice)
+        : (quote?.price ?? null);
+      rows.push({
+        ticker: a.ticker, name: a.name || '', type: a.type,
+        qty: null, avg: null, cur, totalInv: null, totalCur: null, plVal: null, plPct: null,
+        targetPrice: parseFloat(a.targetPrice) || null,
+        rank: a.rank || null, notes: a.notes || '',
+        source: 'Radar',
+      });
+    });
+  }
+
+  // Filtro de tipo
+  if (typeFilter !== 'ALL') rows = rows.filter(r => r.type === typeFilter);
+
+  // Ordenação
+  rows.sort((a, b) => {
+    if (sortBy === 'pl_pct') return (b.plPct ?? -9999) - (a.plPct ?? -9999);
+    if (sortBy === 'pl_val') return (b.plVal ?? -9999) - (a.plVal ?? -9999);
+    if (sortBy === 'total')  return (b.totalInv ?? 0) - (a.totalInv ?? 0);
+    if (sortBy === 'rank') {
+      const ra = parseInt(a.rank) || 9999;
+      const rb = parseInt(b.rank) || 9999;
+      return ra - rb;
+    }
+    return a.ticker.localeCompare(b.ticker);
+  });
+
+  // ── Cards de Resumo ──
+  const portRows = rows.filter(r => r.source === 'Carteira');
+  const totalInv = portRows.reduce((s, r) => s + (r.totalInv || 0), 0);
+  const totalCur = portRows.reduce((s, r) => s + (r.totalCur || 0), 0);
+  const plTotal  = totalCur - totalInv;
+  const plPct    = totalInv > 0 ? (plTotal / totalInv) * 100 : 0;
+  const plClass  = plTotal >= 0 ? 'pos' : 'neg';
+
+  const summaryEl = document.getElementById('reports-summary-row');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="report-summary-card">
+        <div class="rsc-label">Total Investido</div>
+        <div class="rsc-value">${fmtCurrency(totalInv)}</div>
+      </div>
+      <div class="report-summary-card">
+        <div class="rsc-label">Valor Atual</div>
+        <div class="rsc-value">${fmtCurrency(totalCur)}</div>
+      </div>
+      <div class="report-summary-card">
+        <div class="rsc-label">P&amp;L Total</div>
+        <div class="rsc-value ${plClass}">${plTotal >= 0 ? '+' : ''}${fmtCurrency(plTotal)}</div>
+        <div class="rsc-sub ${plClass}">${plTotal >= 0 ? '+' : ''}${plPct.toFixed(2)}%</div>
+      </div>
+      <div class="report-summary-card">
+        <div class="rsc-label">Ativos</div>
+        <div class="rsc-value">${rows.length}</div>
+        <div class="rsc-sub">${portRows.length} carteira · ${rows.length - portRows.length} radar</div>
+      </div>`;
+  }
+
+  // ── Tabela ──
+  const tbody = document.getElementById('reports-tbody');
+  if (!tbody) return;
+
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px;">Nenhum ativo encontrado com os filtros selecionados.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const plClass = r.plVal == null ? '' : r.plVal >= 0 ? 'pos' : 'neg';
+    const rankHtml = r.rank
+      ? `<span class="rank-badge rank-${r.rank <= 3 ? r.rank : 'n'}">#${r.rank}</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+    const srcBadge = `<span class="report-src-badge ${r.source === 'Carteira' ? 'carteira' : 'radar'}">${r.source}</span>`;
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px;">${renderAssetLogoHtml(r.ticker,'explorer-logo')}<div><strong style="cursor:pointer;" onclick="openAssetDetail('${r.ticker}')">${escapeHtml(r.ticker)}</strong><div style="font-size:0.7rem;color:var(--text-muted);">${escapeHtml(r.name)}</div></div>${srcBadge}</div></td>
+      <td><span class="asset-category-badge cat-${(r.type||'').toLowerCase()}">${r.type}</span></td>
+      <td class="num">${r.qty != null ? r.qty : '—'}</td>
+      <td class="num">${r.avg != null ? fmtN(r.avg) : '—'}</td>
+      <td class="num">${r.cur != null ? fmtN(r.cur) : '—'}</td>
+      <td class="num">${r.totalInv != null ? fmtCurrency(r.totalInv) : '—'}</td>
+      <td class="num">${r.totalCur != null ? fmtCurrency(r.totalCur) : '—'}</td>
+      <td class="num ${plClass}">${r.plVal != null ? (r.plVal >= 0 ? '+' : '') + fmtCurrency(r.plVal) : '—'}</td>
+      <td class="num ${plClass}">${r.plPct != null ? (r.plPct >= 0 ? '+' : '') + r.plPct.toFixed(2) + '%' : '—'}</td>
+      <td class="num">${r.targetPrice != null ? fmtN(r.targetPrice) : '—'}</td>
+      <td style="text-align:center;">${rankHtml}</td>
+      <td class="report-notes-cell" title="${escapeHtml(r.notes)}">${r.notes ? escapeHtml(r.notes.slice(0, 40)) + (r.notes.length > 40 ? '…' : '') : '<span style="color:var(--text-muted)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Auxiliar de formatação monetária
+function fmtCurrency(v) {
+  if (v == null || isNaN(v)) return '—';
+  return 'R$ ' + Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 /* ═══════════════════════════════════════════════════════════
    RENDER — SUMMARY HERO
@@ -1244,6 +1378,13 @@ function renderWatchlist() {
     items = items.filter(a => a.ticker.toLowerCase().includes(q) || (a.name||'').toLowerCase().includes(q));
   }
 
+  // Ordenar por prioridade: com rank primeiro (crescente), sem rank depois
+  items.sort((a, b) => {
+    const ra = parseInt(a.rank) || 9999;
+    const rb = parseInt(b.rank) || 9999;
+    return ra - rb;
+  });
+
   const list = document.getElementById('watchlist-items-list');
   document.getElementById('watchlist-count-badge').textContent = state.watchlist.length;
 
@@ -1282,11 +1423,14 @@ function renderWatchlist() {
     return `
     <div class="asset-card" id="card-w-${a.id}">
       <div class="asset-card-header">
-        <div class="asset-identity" style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openAssetDetail('${a.ticker}')" title="Clique para ver gráfico TradingView e Preço Justo">
-          ${renderAssetLogoHtml(a.ticker, 'asset-logo')}
-          <div>
-            <div class="asset-tag">${escapeHtml(a.ticker)}</div>
-            ${a.name ? `<div class="asset-name">${escapeHtml(a.name)}</div>` : ''}
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+          ${a.rank ? `<span class="rank-badge rank-${a.rank <= 3 ? a.rank : 'n'}" title="Prioridade de investimento #${a.rank}">#${a.rank}</span>` : ''}
+          <div class="asset-identity" style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;" onclick="openAssetDetail('${a.ticker}')" title="Clique para ver gráfico TradingView e Preço Justo">
+            ${renderAssetLogoHtml(a.ticker, 'asset-logo')}
+            <div>
+              <div class="asset-tag">${escapeHtml(a.ticker)}</div>
+              ${a.name ? `<div class="asset-name">${escapeHtml(a.name)}</div>` : ''}
+            </div>
           </div>
         </div>
         <div class="asset-card-actions">
@@ -2484,6 +2628,7 @@ function openAddWatchlistModal(prefill = {}) {
   document.getElementById('watchlist-type').value         = prefill.type   || 'STOCK';
   document.getElementById('watchlist-target-price').value  = '';
   document.getElementById('watchlist-current-price').value = '';
+  document.getElementById('watchlist-rank').value         = '';
   document.getElementById('watchlist-notes').value        = '';
   openModal('modal-watchlist');
 }
@@ -2499,6 +2644,7 @@ function openEditWatchlistModal(id) {
   document.getElementById('watchlist-type').value         = a.type;
   document.getElementById('watchlist-target-price').value  = a.targetPrice || '';
   document.getElementById('watchlist-current-price').value = a.currentPrice || '';
+  document.getElementById('watchlist-rank').value         = a.rank || '';
   document.getElementById('watchlist-notes').value        = a.notes || '';
   openModal('modal-watchlist');
 }
@@ -2511,11 +2657,12 @@ document.getElementById('watchlist-form').addEventListener('submit', async funct
   const type   = document.getElementById('watchlist-type').value;
   const target = parseFloat(document.getElementById('watchlist-target-price').value) || null;
   const cur    = parseFloat(document.getElementById('watchlist-current-price').value) || null;
+  const rank   = parseInt(document.getElementById('watchlist-rank').value) || null;
   const notes  = document.getElementById('watchlist-notes').value.trim();
 
   if (!ticker) { showToast('Ticker obrigatório.', 'error'); return; }
 
-  const item = { id, ticker, name, type, targetPrice: target, currentPrice: cur, notes };
+  const item = { id, ticker, name, type, targetPrice: target, currentPrice: cur, rank, notes };
 
   if (editingId) {
     const idx = state.watchlist.findIndex(x => x.id === editingId);

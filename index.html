@@ -143,6 +143,10 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         Explorer B3
       </button>
+      <button class="desktop-nav-item" data-tab="reports">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        Relatórios
+      </button>
       <button class="desktop-nav-item" data-tab="config">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Ajustes
@@ -475,6 +479,65 @@
         </div>
       </div>
     </section>
+
+    <!-- ══ RELATÓRIOS ══ -->
+    <section id="view-reports" class="view-section">
+      <div class="reports-header">
+        <h2 class="reports-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          Relatório de Investimentos
+        </h2>
+        <div class="reports-filters">
+          <select id="report-source" class="form-select" onchange="renderReports()" style="width:auto;font-size:0.8rem;">
+            <option value="all">Carteira + Radar</option>
+            <option value="portfolio">Apenas Carteira</option>
+            <option value="watchlist">Apenas Radar</option>
+          </select>
+          <select id="report-type-filter" class="form-select" onchange="renderReports()" style="width:auto;font-size:0.8rem;">
+            <option value="ALL">Todos os Tipos</option>
+            <option value="STOCK">Ações</option>
+            <option value="FII">FIIs</option>
+            <option value="ETF">ETFs / BDRs</option>
+            <option value="CRYPTO">Criptomoedas</option>
+            <option value="FIXED">Renda Fixa</option>
+          </select>
+          <select id="report-sort" class="form-select" onchange="renderReports()" style="width:auto;font-size:0.8rem;">
+            <option value="ticker">Ticker A→Z</option>
+            <option value="pl_pct">P&amp;L % ↓</option>
+            <option value="pl_val">P&amp;L R$ ↓</option>
+            <option value="total">Total Investido ↓</option>
+            <option value="rank">Prioridade ↑</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Cards de resumo -->
+      <div class="reports-summary-row" id="reports-summary-row"></div>
+
+      <!-- Tabela -->
+      <div class="reports-table-wrapper">
+        <table class="reports-table" id="reports-table">
+          <thead>
+            <tr>
+              <th>Ativo</th>
+              <th>Tipo</th>
+              <th class="num">Qtd</th>
+              <th class="num">Preço Médio</th>
+              <th class="num">Preço Atual</th>
+              <th class="num">Total Investido</th>
+              <th class="num">Valor Atual</th>
+              <th class="num">P&amp;L R$</th>
+              <th class="num">P&amp;L %</th>
+              <th class="num">Preço Teto</th>
+              <th>Prioridade</th>
+              <th>Notas</th>
+            </tr>
+          </thead>
+          <tbody id="reports-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
   </main>
 
   <!-- Bottom Nav (Mobile) -->
@@ -490,6 +553,10 @@
     <button class="nav-item" data-tab="explorer">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <span>Explorer</span>
+    </button>
+    <button class="nav-item" data-tab="reports">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      <span>Relatórios</span>
     </button>
     <button class="nav-item" data-tab="config">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -603,8 +670,12 @@
         </div>
       </div>
       <div class="form-group">
+        <label class="form-label">🏆 Prioridade de Investimento</label>
+        <input type="number" min="1" max="99" id="watchlist-rank" class="form-input" placeholder="Ex: 1 = primeiro a comprar, 2 = segundo…">
+      </div>
+      <div class="form-group">
         <label class="form-label">Notas / Tese</label>
-        <textarea id="watchlist-notes" class="form-textarea" rows="2" placeholder="Motivo de monitoramento…"></textarea>
+        <textarea id="watchlist-notes" class="form-textarea" rows="2" placeholder="Motivo de monitoramento, tese de investimento…"></textarea>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-secondary" onclick="closeModal('modal-watchlist')">Cancelar</button>
