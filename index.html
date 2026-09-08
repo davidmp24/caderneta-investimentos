@@ -772,8 +772,18 @@
 <!-- ══════════════════════════════════════════════════════════════════
      MODAL: DETALHES DO ATIVO (TRADINGVIEW & PREÇO JUSTO / VALUATION)
      ══════════════════════════════════════════════════════════════════ -->
-<div id="modal-asset-detail" class="modal-overlay">
-  <div class="modal-card modal-detail-card">
+<div id="modal-asset-detail">
+  <div class="modal-detail-card">
+    <!-- Barra de navegação superior (comportamento de nova aba) -->
+    <div class="detail-nav-bar">
+      <button class="detail-back-btn" onclick="closeAssetDetail()" title="Voltar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Voltar
+      </button>
+      <span class="detail-nav-title" id="detail-nav-title">Detalhes do Ativo</span>
+      <div style="width:80px;"></div><!-- spacer -->
+    </div>
+
     <!-- Header do Ativo -->
     <div class="detail-header">
       <div class="detail-header-left">
@@ -796,11 +806,9 @@
             <span id="detail-market-badge" class="best-badge-status open">Ao vivo</span>
           </div>
         </div>
-        <button class="modal-close-btn" onclick="closeModal('modal-asset-detail')" title="Fechar">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
       </div>
     </div>
+
 
     <!-- Barra de Ações Rápidas -->
     <div class="detail-actions-bar">
@@ -923,7 +931,7 @@
       <div style="font-size:0.72rem; color:var(--text-muted);">
         * Cálculos baseados nos métodos de Graham e Bazin. Não representa recomendação direta de compra/venda.
       </div>
-      <button type="button" class="btn-secondary" onclick="closeModal('modal-asset-detail')">Fechar</button>
+      <button type="button" class="btn-secondary" onclick="closeAssetDetail()">← Voltar</button>
     </div>
   </div>
 </div>

@@ -1611,8 +1611,15 @@ function openAssetDetail(ticker) {
   // 6. Resumo de Posição do Usuário
   updateDetailUserPosition(clean);
 
-  // 7. Abrir Modal
-  openModal('modal-asset-detail');
+  // 7. Abrir como tela cheia (slide da direita)
+  const detailEl = document.getElementById('modal-asset-detail');
+  if (detailEl) {
+    detailEl.classList.add('active');
+    detailEl.scrollTop = 0;
+    document.body.style.overflow = 'hidden';
+  }
+  const navTitle = document.getElementById('detail-nav-title');
+  if (navTitle) navTitle.textContent = `${clean} — Detalhes`;
 
   // 8. Renderizar Gráfico em Tempo Real TradingView
   renderTradingViewChart(clean, type);
@@ -1626,6 +1633,25 @@ function openAssetDetail(ticker) {
     }
   });
 }
+
+function closeAssetDetail() {
+  const detailEl = document.getElementById('modal-asset-detail');
+  if (detailEl) {
+    detailEl.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+  currentDetailTicker = null;
+}
+
+// Fechar com tecla Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const detailEl = document.getElementById('modal-asset-detail');
+    if (detailEl && detailEl.classList.contains('active')) {
+      closeAssetDetail();
+    }
+  }
+});
 
 function updateDetailPriceUI(ticker) {
   const quote = getStockQuoteData(ticker);
@@ -1964,7 +1990,7 @@ function detailActionCarteira() {
   if (!currentDetailTicker) return;
   const stockInfo = getStockInfo(currentDetailTicker);
   const portItem = state.portfolio.find(p => p.ticker === currentDetailTicker);
-  closeModal('modal-asset-detail');
+  closeAssetDetail();
   if (portItem) {
     openEditAssetModal(portItem.id);
   } else {
@@ -1976,7 +2002,7 @@ function detailActionRadar() {
   if (!currentDetailTicker) return;
   const stockInfo = getStockInfo(currentDetailTicker);
   const watchItem = state.watchlist.find(w => w.ticker === currentDetailTicker);
-  closeModal('modal-asset-detail');
+  closeAssetDetail();
   if (watchItem) {
     openEditWatchlistModal(watchItem.id);
   } else {
