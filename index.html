@@ -266,6 +266,36 @@
         </div>
       </div>
 
+      <!-- Widget: Maior Volume de Mercado -->
+      <div class="widget-section" id="widget-volume">
+        <div class="widget-header">
+          <div class="widget-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            Maior Volume — B3 Hoje
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="btn-scroll-nav" onclick="scrollWidget('volume-scroll',-280)" title="Rolar esquerda"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <button class="btn-scroll-nav" onclick="scrollWidget('volume-scroll',280)" title="Rolar direita"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
+          </div>
+        </div>
+        <div id="volume-scroll" class="favoritos-scroll"><!-- JS --></div>
+      </div>
+
+      <!-- Widget: Maiores Valores de Mercado -->
+      <div class="widget-section" id="widget-topvalue">
+        <div class="widget-header">
+          <div class="widget-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Maiores Valores — Blue Chips
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="btn-scroll-nav" onclick="scrollWidget('topvalue-scroll',-280)" title="Rolar esquerda"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <button class="btn-scroll-nav" onclick="scrollWidget('topvalue-scroll',280)" title="Rolar direita"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
+          </div>
+        </div>
+        <div id="topvalue-scroll" class="favoritos-scroll"><!-- JS --></div>
+      </div>
+
       <!-- Lista de Ativos da Carteira -->
       <div class="list-header">
         <span class="list-title">Meus Ativos (<span id="portfolio-count-badge">0</span>)</span>

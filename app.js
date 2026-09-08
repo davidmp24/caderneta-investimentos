@@ -686,8 +686,12 @@ function openApp() {
   renderAll();
   renderBestWidget();
   renderFavoritosWidget();
+  renderVolumeWidget();
+  renderTopValueWidget();
   enableScrollDrag('best-scroll');
   enableScrollDrag('favoritos-scroll');
+  enableScrollDrag('volume-scroll');
+  enableScrollDrag('topvalue-scroll');
   initExplorer();
   refreshAllQuotes();
   refreshBestQuotes();
@@ -1534,6 +1538,74 @@ function renderFavoritosWidget() {
     </div>`;
   }).join('');
 }
+
+/* ═══════════════════════════════════════════════════════════
+   WIDGET MAIOR VOLUME — B3
+   ═══════════════════════════════════════════════════════════ */
+
+// Ativos de maior volume médio diário na B3 (blue chips + liquidez)
+const TOP_VOLUME_TICKERS = [
+  'PETR4','VALE3','ITUB4','BBDC4','B3SA3','ABEV3','WEGE3','BBAS3',
+  'ELET3','RENT3','LREN3','MGLU3','CSAN3','VBBR3','PRIO3','RAIZ4',
+  'EMBR3','GGBR4','CSNA3','USIM5',
+];
+
+// Ativos de maior valor de mercado (blue chips by mkt cap)
+const TOP_VALUE_TICKERS = [
+  'PETR4','VALE3','ITUB4','BBAS3','WEGE3','RENT3','ABEV3','B3SA3',
+  'BBDC4','RADL3','SUZB3','EMBR3','EQTL3','CPLE6','EGIE3','TAEE11',
+  'TOTS3','FLRY3','PSSA3','CMIN3',
+];
+
+function _renderMarketWidget(containerId, tickers, accentColor) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const marketOpen = isB3MarketOpen();
+
+  container.innerHTML = tickers.map(ticker => {
+    const info  = getStockInfo(ticker);
+    const quote = getStockQuoteData(ticker);
+    const price = quote?.price ?? null;
+    const chg   = quote?.changePercent ?? null;
+    const isClosedVal = !marketOpen || quote?.isClosed;
+    const chgClass = chg == null ? 'neutral' : chg >= 0 ? 'pos' : 'neg';
+    const chgHtml  = chg != null
+      ? `<span class="best-change ${chgClass}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>`
+      : `<span class="best-change neutral">—</span>`;
+
+    return `
+    <div class="best-card market-widget-card" onclick="openAssetDetail('${ticker}')" style="cursor:pointer;--accent-card:${accentColor};" title="${escapeHtml(info.name || ticker)}">
+      <div class="best-card-top">
+        ${renderAssetLogoHtml(ticker, 'fav-logo')}
+        <div class="best-card-info">
+          <div class="best-ticker">${ticker}</div>
+          <div class="best-name">${escapeHtml((info.name || '').slice(0, 14))}</div>
+        </div>
+      </div>
+      <div class="best-price">${price != null ? fmtN(price) : '—'}</div>
+      <div class="best-market-sub">
+        ${chgHtml}
+        <span class="best-badge-status ${isClosedVal ? 'closed' : 'open'}" style="font-size:0.58rem;">
+          ${isClosedVal ? 'Fechado' : 'Ao vivo'}
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+
+  enableScrollDrag(containerId);
+
+  // Buscar cotações em background
+  QuoteService.getQuotes(tickers).then(quotes => {
+    let updated = false;
+    tickers.forEach(t => {
+      if (quotes[t]?.price) { bestPrices[t] = quotes[t]; updated = true; }
+    });
+    if (updated) _renderMarketWidget(containerId, tickers, accentColor);
+  });
+}
+
+function renderVolumeWidget()   { _renderMarketWidget('volume-scroll',   TOP_VOLUME_TICKERS, 'var(--accent-blue)'); }
+function renderTopValueWidget() { _renderMarketWidget('topvalue-scroll', TOP_VALUE_TICKERS,  'var(--accent-green)'); }
 
 /* ═══════════════════════════════════════════════════════════
    WIDGET BEST — SELEÇÃO PESSOAL (Editável)
@@ -3025,12 +3097,19 @@ async function saveCustomCloudConfig() {
    RENDER PRINCIPAL
    ═══════════════════════════════════════════════════════════ */
 
+function scrollWidget(id, delta) {
+  const el = document.getElementById(id);
+  if (el) el.scrollBy({ left: delta, behavior: 'smooth' });
+}
+
 function renderAll() {
   renderSummary();
   renderPortfolio();
   renderWatchlist();
   renderBestWidget();
   renderFavoritosWidget();
+  renderVolumeWidget();
+  renderTopValueWidget();
   if (currentTab === 'explorer') renderExplorerTable();
 }
 
@@ -3042,6 +3121,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initLoginScreen();
   enableScrollDrag('best-scroll');
   enableScrollDrag('favoritos-scroll');
+  enableScrollDrag('volume-scroll');
+  enableScrollDrag('topvalue-scroll');
 
   // Service Worker
   if ('serviceWorker' in navigator) {
