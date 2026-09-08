@@ -1165,7 +1165,7 @@ function renderPortfolio() {
     return `
     <div class="asset-card" id="card-${a.id}">
       <div class="asset-card-header">
-        <div class="asset-identity" style="display:flex;align-items:center;gap:10px;">
+        <div class="asset-identity" style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openAssetDetail('${a.ticker}')" title="Clique para ver gráfico TradingView e Preço Justo">
           ${renderAssetLogoHtml(a.ticker, 'asset-logo')}
           <div>
             <div style="display:flex;align-items:center;gap:7px;">
@@ -1282,7 +1282,7 @@ function renderWatchlist() {
     return `
     <div class="asset-card" id="card-w-${a.id}">
       <div class="asset-card-header">
-        <div class="asset-identity" style="display:flex;align-items:center;gap:10px;">
+        <div class="asset-identity" style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openAssetDetail('${a.ticker}')" title="Clique para ver gráfico TradingView e Preço Justo">
           ${renderAssetLogoHtml(a.ticker, 'asset-logo')}
           <div>
             <div class="asset-tag">${escapeHtml(a.ticker)}</div>
@@ -1372,7 +1372,7 @@ function renderFavoritosWidget() {
     }
 
     return `
-    <div class="fav-card" onclick="switchTab('radar')">
+    <div class="fav-card" onclick="openAssetDetail('${a.ticker}')" style="cursor:pointer;" title="Clique para ver gráfico TradingView e Preço Justo de ${escapeHtml(a.ticker)}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
         ${renderAssetLogoHtml(a.ticker, 'fav-logo')}
         <div style="flex:1;min-width:0;">
@@ -1425,7 +1425,7 @@ function renderBestWidget() {
     const isClosedVal = !marketOpen || q.isClosed;
 
     return `
-      <div class="best-card" onclick="quickViewBestTicker('${item.ticker}')" title="${isClosedVal ? 'Mercado Fechado: último valor de fechamento registrado' : 'Mercado Aberto: cotação em tempo real'}">
+      <div class="best-card" onclick="openAssetDetail('${item.ticker}')" style="cursor:pointer;" title="Clique para ver gráfico TradingView e Preço Justo de ${escapeHtml(item.ticker)}">
         <div class="best-card-top">
           ${renderAssetLogoHtml(item.ticker, 'fav-logo')}
           <div class="best-card-info">
@@ -1505,17 +1505,515 @@ async function refreshBestQuotes() {
   }
 }
 
-function quickViewBestTicker(ticker) {
-  const inRadar = state.watchlist.some(w => w.ticker === ticker);
-  if (inRadar) {
-    switchTab('radar');
+/* ═══════════════════════════════════════════════════════════
+   DETALHES DO ATIVO — TRADINGVIEW & PREÇO JUSTO / VALUATION
+   ═══════════════════════════════════════════════════════════ */
+
+let currentDetailTicker = null;
+let currentValuationMethod = 'graham'; // 'graham', 'bazin', 'target', 'custom'
+let customTargetPrices = {};
+
+function getStockInfo(ticker) {
+  const clean = (ticker || '').toUpperCase().trim();
+  if (typeof B3_STOCKS !== 'undefined' && Array.isArray(B3_STOCKS)) {
+    const found = B3_STOCKS.find(s => s.ticker === clean);
+    if (found) return found;
+  }
+  // Se não estiver na lista estática, montar objeto a partir da carteira/radar
+  const portItem = state.portfolio.find(p => p.ticker === clean);
+  if (portItem) {
+    return {
+      ticker: clean,
+      name: portItem.name || clean,
+      type: portItem.type || 'STOCK',
+      sector: 'Carteira Pessoal',
+      targetPrice: null,
+    };
+  }
+  const watchItem = state.watchlist.find(w => w.ticker === clean);
+  if (watchItem) {
+    return {
+      ticker: clean,
+      name: watchItem.name || clean,
+      type: watchItem.type || 'STOCK',
+      sector: 'Radar',
+      targetPrice: watchItem.targetPrice,
+    };
+  }
+  return {
+    ticker: clean,
+    name: clean,
+    type: 'STOCK',
+    sector: 'Mercado B3',
+  };
+}
+
+function openAssetDetail(ticker) {
+  if (!ticker) return;
+  const clean = ticker.toUpperCase().trim();
+  currentDetailTicker = clean;
+
+  const stockInfo = getStockInfo(clean);
+  const quote = getStockQuoteData(clean);
+
+  // 1. Logo e Identificação
+  const logoContainer = document.getElementById('detail-asset-logo-container');
+  if (logoContainer) {
+    logoContainer.innerHTML = renderAssetLogoHtml(clean, 'fav-logo');
+  }
+
+  const tickerEl = document.getElementById('detail-asset-ticker');
+  if (tickerEl) tickerEl.textContent = clean;
+
+  const nameEl = document.getElementById('detail-asset-name');
+  if (nameEl) nameEl.textContent = stockInfo.name || quote.name || clean;
+
+  const sectorEl = document.getElementById('detail-asset-sector');
+  if (sectorEl) sectorEl.textContent = stockInfo.sector || 'Mercado Geral';
+
+  const typeBadge = document.getElementById('detail-asset-type-badge');
+  const type = stockInfo.type || (clean.endsWith('11') ? (clean.startsWith('BOVA')||clean.startsWith('HASH')||clean.startsWith('IVVB') ? 'ETF' : 'FII') : clean.endsWith('34') ? 'ETF' : 'STOCK');
+  if (typeBadge) {
+    typeBadge.textContent = type === 'STOCK' ? 'AÇÃO' : type;
+    typeBadge.className = `asset-category-badge cat-${type.toLowerCase()}`;
+  }
+
+  // Define método padrão de acordo com a categoria
+  if (type === 'FII') {
+    currentValuationMethod = 'bazin';
+  } else if (type === 'ETF') {
+    currentValuationMethod = 'target';
   } else {
-    switchTab('explorer');
-    const input = document.getElementById('explorer-search-input');
-    if (input) {
-      input.value = ticker;
-      explorerSearch();
+    currentValuationMethod = 'graham';
+  }
+
+  // 2. Atualizar Preço e Variação
+  updateDetailPriceUI(clean);
+
+  // 3. Atualizar Valuation e Preço Justo
+  renderDetailValuation(clean);
+
+  // 4. Grid de Indicadores Fundamentalistas
+  renderDetailFundamentals(stockInfo, quote);
+
+  // 5. Descrição / Sobre o ativo
+  const aboutBox = document.getElementById('detail-about-box');
+  const aboutText = document.getElementById('detail-about-text');
+  if (aboutBox && aboutText) {
+    if (stockInfo.desc) {
+      aboutText.textContent = stockInfo.desc;
+      aboutBox.style.display = 'block';
+    } else {
+      aboutBox.style.display = 'none';
     }
+  }
+
+  // 6. Resumo de Posição do Usuário
+  updateDetailUserPosition(clean);
+
+  // 7. Abrir Modal
+  openModal('modal-asset-detail');
+
+  // 8. Renderizar Gráfico em Tempo Real TradingView
+  renderTradingViewChart(clean, type);
+
+  // 9. Atualizar cotação fresca em segundo plano
+  QuoteService.getQuotes([clean]).then(quotes => {
+    if (quotes[clean] && currentDetailTicker === clean) {
+      bestPrices[clean] = quotes[clean];
+      updateDetailPriceUI(clean);
+      renderDetailValuation(clean);
+    }
+  });
+}
+
+function updateDetailPriceUI(ticker) {
+  const quote = getStockQuoteData(ticker);
+  const marketOpen = isB3MarketOpen();
+  const isClosedVal = !marketOpen || quote.isClosed;
+
+  const priceEl = document.getElementById('detail-asset-price');
+  if (priceEl) priceEl.textContent = quote.price != null ? fmtN(quote.price) : '—';
+
+  const chgEl = document.getElementById('detail-asset-change');
+  if (chgEl) {
+    const chg = quote.change;
+    if (chg != null) {
+      chgEl.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
+      chgEl.className = `badge-profit ${chg >= 0 ? 'positive' : 'negative'}`;
+    } else {
+      chgEl.textContent = '0.00%';
+      chgEl.className = 'badge-profit neutral';
+    }
+  }
+
+  const marketBadge = document.getElementById('detail-market-badge');
+  if (marketBadge) {
+    marketBadge.className = `best-badge-status ${isClosedVal ? 'closed' : 'open'}`;
+    marketBadge.textContent = isClosedVal ? 'Últ. Fechamento' : 'Ao vivo';
+  }
+}
+
+function switchValuationMethod(method) {
+  currentValuationMethod = method;
+  document.querySelectorAll('#valuation-tabs .val-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.method === method);
+  });
+  if (currentDetailTicker) {
+    renderDetailValuation(currentDetailTicker);
+  }
+}
+
+function renderDetailValuation(ticker) {
+  const stockInfo = getStockInfo(ticker);
+  const quote = getStockQuoteData(ticker);
+  const curPrice = quote?.price || null;
+
+  // Atualizar botões das tabs
+  document.querySelectorAll('#valuation-tabs .val-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.method === currentValuationMethod);
+  });
+
+  let fairPrice = null;
+  let methodTitle = '';
+  let methodTag = '';
+  let explanationHtml = '';
+
+  const lpa = stockInfo.lpa != null ? stockInfo.lpa : null;
+  const vpa = stockInfo.vpa != null ? stockInfo.vpa : null;
+  const divAnual = stockInfo.divAnual != null
+    ? stockInfo.divAnual
+    : (stockInfo.dy && curPrice ? (curPrice * stockInfo.dy / 100) : null);
+
+  if (currentValuationMethod === 'graham') {
+    methodTitle = 'Preço Justo (Benjamin Graham)';
+    methodTag = 'Fórmula: √(22.5 × LPA × VPA)';
+    if (lpa && vpa && lpa > 0 && vpa > 0) {
+      fairPrice = Math.sqrt(22.5 * lpa * vpa);
+      explanationHtml = `
+        <strong>Fórmula de Benjamin Graham:</strong> √(22.5 × LPA × VPA)<br>
+        • Lucro por Ação (LPA): <strong>R$ ${lpa.toFixed(2)}</strong><br>
+        • Valor Patrimonial por Ação (VPA): <strong>R$ ${vpa.toFixed(2)}</strong><br>
+        Indica o valor intrínseco teórico máximo a pagar para manter múltiplos combinados P/L ≤ 15 e P/VP ≤ 1.5.
+      `;
+    } else {
+      fairPrice = stockInfo.targetPrice || null;
+      explanationHtml = `
+        Ativo sem LPA ou VPA positivo registrado (comum em FIIs ou empresas em reestruturação).<br>
+        Recomendamos analisar pelo <strong>Método Décio Bazin (Dividendos)</strong> ou <strong>Preço Alvo Consenso</strong>.
+      `;
+    }
+  } else if (currentValuationMethod === 'bazin') {
+    methodTitle = 'Preço Teto de Dividendos (Décio Bazin)';
+    methodTag = 'Fórmula: Proventos Anuais / 6%';
+    if (divAnual && divAnual > 0) {
+      fairPrice = divAnual / 0.06;
+      explanationHtml = `
+        <strong>Método Décio Bazin:</strong> Proventos Anuais / 6%<br>
+        • Dividendos Projetados/Ano: <strong>R$ ${divAnual.toFixed(2)}</strong> por ação/cota.<br>
+        Comprando até <strong>R$ ${fairPrice.toFixed(2)}</strong>, você assegura um Dividend Yield mínimo de <strong>6,0% ao ano</strong> em renda passiva.
+      `;
+    } else {
+      explanationHtml = `Proventos anuais não informados para cálculo automático do Preço Teto Bazin.`;
+    }
+  } else if (currentValuationMethod === 'target') {
+    methodTitle = 'Preço Alvo / Consenso do Mercado';
+    methodTag = 'Consenso de Analistas & DCF';
+    fairPrice = stockInfo.targetPrice || (curPrice ? curPrice * 1.20 : null);
+    explanationHtml = `
+      Estimativa média de preço alvo apurada por casas de análise e projeções de fluxo de caixa descontado (DCF).
+    `;
+  } else if (currentValuationMethod === 'custom') {
+    methodTitle = 'Meu Preço Teto Personalizado';
+    methodTag = 'Definido pelo Investidor';
+    const watchItem = state.watchlist.find(w => w.ticker === ticker);
+    const savedCustom = customTargetPrices[ticker] || watchItem?.targetPrice || null;
+    fairPrice = savedCustom;
+    explanationHtml = `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span>Defina o seu Preço Teto de compra:</span>
+        <input type="number" step="any" id="input-custom-target" class="form-input" style="width:110px;padding:4px 8px;font-size:0.8rem;" placeholder="R$ 0,00" value="${savedCustom || ''}">
+        <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.75rem;" onclick="saveCustomTargetFromDetail()">Salvar</button>
+      </div>
+      <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
+        O seu preço teto será salvo no Radar para alertar quando estiver em zona de oportunidade.
+      </div>
+    `;
+  }
+
+  // Preço Justo Label & Value
+  const labelEl = document.getElementById('val-fair-label');
+  const priceEl = document.getElementById('val-fair-price');
+  const methodTagEl = document.getElementById('val-fair-method-tag');
+  if (labelEl) labelEl.textContent = methodTitle || 'Preço Justo Estimado';
+  if (priceEl) priceEl.textContent = fairPrice != null ? fmtN(fairPrice) : '—';
+  if (methodTagEl) methodTagEl.textContent = methodTag;
+
+  // Upside / Projeção de Valorização
+  const upsideEl = document.getElementById('val-upside-pct');
+  const statusBadge = document.getElementById('val-status-badge');
+  const marginNominalEl = document.getElementById('val-margin-nominal');
+  const marginDescEl = document.getElementById('val-margin-desc');
+
+  const gaugeCurrent = document.getElementById('val-gauge-current');
+  const gaugeTarget = document.getElementById('val-gauge-target');
+  const gaugeAssessment = document.getElementById('val-gauge-assessment');
+  const gaugeFill = document.getElementById('val-gauge-fill');
+
+  if (gaugeCurrent) gaugeCurrent.textContent = curPrice ? fmtN(curPrice) : '—';
+  if (gaugeTarget) gaugeTarget.textContent = fairPrice ? fmtN(fairPrice) : '—';
+
+  if (curPrice != null && fairPrice != null && curPrice > 0) {
+    const upsidePct = ((fairPrice - curPrice) / curPrice) * 100;
+    const marginNominal = fairPrice - curPrice;
+
+    if (upsideEl) {
+      upsideEl.textContent = `${upsidePct >= 0 ? '+' : ''}${upsidePct.toFixed(2)}%`;
+      upsideEl.className = `val-metric-value upside ${upsidePct >= 0 ? 'upside' : 'downside'}`;
+    }
+
+    if (marginNominalEl) {
+      marginNominalEl.textContent = (marginNominal >= 0 ? '+' : '') + fmtN(marginNominal);
+    }
+    if (marginDescEl) {
+      marginDescEl.textContent = marginNominal >= 0
+        ? `Desconto de ${fmtN(marginNominal)} por ação`
+        : `Ágio de ${fmtN(Math.abs(marginNominal))} acima do justo`;
+    }
+
+    // Avaliação & Badge
+    if (statusBadge) {
+      if (upsidePct >= 20) {
+        statusBadge.textContent = '✓ Oportunidade Clara (Margem Alta)';
+        statusBadge.className = 'val-status-badge opportunity';
+        if (gaugeAssessment) gaugeAssessment.textContent = 'Potencial de Valorização Alto';
+      } else if (upsidePct >= 0) {
+        statusBadge.textContent = '✓ Abaixo do Preço Justo (Comprar)';
+        statusBadge.className = 'val-status-badge opportunity';
+        if (gaugeAssessment) gaugeAssessment.textContent = 'Margem de Segurança Positiva';
+      } else if (upsidePct >= -8) {
+        statusBadge.textContent = '≈ Preço Justo / Neutro';
+        statusBadge.className = 'val-status-badge neutral';
+        if (gaugeAssessment) gaugeAssessment.textContent = 'Negociando Próximo ao Valor Justo';
+      } else {
+        statusBadge.textContent = '✕ Acima do Preço Justo (Aguardar)';
+        statusBadge.className = 'val-status-badge overvalued';
+        if (gaugeAssessment) gaugeAssessment.textContent = 'Preço Esticado / Risco Elevado';
+      }
+    }
+
+    // Gauge bar fill
+    if (gaugeFill) {
+      if (upsidePct >= 0) {
+        gaugeFill.className = 'val-gauge-fill';
+        const fillW = Math.min(100, Math.max(15, Math.round((curPrice / fairPrice) * 100)));
+        gaugeFill.style.width = fillW + '%';
+      } else {
+        gaugeFill.className = 'val-gauge-fill downside';
+        gaugeFill.style.width = '100%';
+      }
+    }
+  } else {
+    if (upsideEl) {
+      upsideEl.textContent = '—';
+      upsideEl.className = 'val-metric-value upside';
+    }
+    if (statusBadge) {
+      statusBadge.textContent = 'Aguardando cotação';
+      statusBadge.className = 'val-status-badge neutral';
+    }
+    if (marginNominalEl) marginNominalEl.textContent = '—';
+    if (gaugeFill) gaugeFill.style.width = '0%';
+  }
+
+  const explBox = document.getElementById('val-formula-explanation');
+  if (explBox) explBox.innerHTML = explanationHtml;
+}
+
+function saveCustomTargetFromDetail() {
+  const input = document.getElementById('input-custom-target');
+  if (!input || !currentDetailTicker) return;
+  const val = parseFloat(input.value);
+  if (isNaN(val) || val <= 0) {
+    showToast('Informe um valor de Preço Teto válido.', 'error');
+    return;
+  }
+  customTargetPrices[currentDetailTicker] = val;
+
+  // Se já estiver no radar, atualizar o targetPrice
+  const watchItem = state.watchlist.find(w => w.ticker === currentDetailTicker);
+  if (watchItem) {
+    watchItem.targetPrice = val;
+    saveEncryptedState();
+    renderWatchlist();
+    renderFavoritosWidget();
+  }
+
+  renderDetailValuation(currentDetailTicker);
+  showToast(`Preço Teto de ${currentDetailTicker} definido para ${fmtN(val)}!`, 'success');
+}
+
+function renderDetailFundamentals(stockInfo, quote) {
+  const container = document.getElementById('detail-fundamentals-grid');
+  if (!container) return;
+
+  const curPrice = quote?.price;
+  const pl = stockInfo.pl != null ? (typeof stockInfo.pl === 'number' ? stockInfo.pl.toFixed(2) : stockInfo.pl) : '—';
+  const pvp = stockInfo.pvp != null ? (typeof stockInfo.pvp === 'number' ? stockInfo.pvp.toFixed(2) : stockInfo.pvp) : '—';
+  const dy = stockInfo.dy != null ? `${stockInfo.dy.toFixed(2)}%` : '—';
+  const roe = stockInfo.roe != null ? `${stockInfo.roe.toFixed(2)}%` : '—';
+  const margem = stockInfo.netMargin != null ? `${stockInfo.netMargin.toFixed(1)}%` : '—';
+  const lpa = stockInfo.lpa != null ? fmtN(stockInfo.lpa) : '—';
+  const vpa = stockInfo.vpa != null ? fmtN(stockInfo.vpa) : '—';
+  const min52 = stockInfo.min52 != null ? fmtN(stockInfo.min52) : '—';
+  const max52 = stockInfo.max52 != null ? fmtN(stockInfo.max52) : '—';
+
+  const metrics = [
+    { label: 'P/L (Preço/Lucro)', val: pl },
+    { label: 'P/VP (Preço/Patrimônio)', val: pvp },
+    { label: 'Div. Yield 12m', val: dy, highlight: true },
+    { label: 'ROE (Rentab. PL)', val: roe },
+    { label: 'Margem Líquida', val: margem },
+    { label: 'LPA (Lucro/Ação)', val: lpa },
+    { label: 'VPA (Valor Patrim.)', val: vpa },
+    { label: 'Mínima 52 sem.', val: min52 },
+    { label: 'Máxima 52 sem.', val: max52 },
+  ];
+
+  container.innerHTML = metrics.map(m => `
+    <div class="fundamental-item">
+      <span class="fundamental-label">${m.label}</span>
+      <span class="fundamental-val" style="${m.highlight ? 'color:var(--accent-green);' : ''}">${m.val}</span>
+    </div>
+  `).join('');
+}
+
+function updateDetailUserPosition(ticker) {
+  const portItem = state.portfolio.find(p => p.ticker === ticker);
+  const watchItem = state.watchlist.find(w => w.ticker === ticker);
+  const pill = document.getElementById('detail-user-pos-pill');
+  const btnPortText = document.getElementById('btn-detail-portfolio-text');
+  const btnRadarText = document.getElementById('btn-detail-radar-text');
+
+  if (btnPortText) btnPortText.textContent = portItem ? 'Editar na Carteira' : '+ Carteira';
+  if (btnRadarText) btnRadarText.textContent = watchItem ? 'Editar no Radar' : '☆ Radar';
+
+  if (!pill) return;
+
+  if (portItem) {
+    const qty = parseFloat(portItem.quantity) || 0;
+    const avg = parseFloat(portItem.avgPrice) || 0;
+    pill.innerHTML = `💼 <strong>Na Carteira:</strong> ${qty} cotas · PM: ${fmtN(avg)}`;
+    pill.style.display = 'block';
+  } else if (watchItem) {
+    const teto = watchItem.targetPrice ? fmtN(watchItem.targetPrice) : 'Sem teto';
+    pill.innerHTML = `⭐ <strong>No Radar:</strong> Teto monitorado: ${teto}`;
+    pill.style.display = 'block';
+  } else {
+    pill.style.display = 'none';
+  }
+}
+
+function renderTradingViewChart(ticker, type) {
+  const container = document.getElementById('tradingview-chart-box');
+  if (!container) return;
+  container.innerHTML = '';
+
+  let tvSymbol = `BMFBOVESPA:${ticker}`;
+  if (ticker === 'TRPL4') tvSymbol = 'BMFBOVESPA:ISAE4';
+  if (ticker.endsWith('USDT') || ticker.endsWith('BTC')) tvSymbol = `BINANCE:${ticker}`;
+
+  const widgetId = `tv_chart_${Math.random().toString(36).slice(2, 9)}`;
+  container.innerHTML = `<div id="${widgetId}" style="width:100%;height:100%;"></div>`;
+
+  if (typeof TradingView !== 'undefined' && TradingView.widget) {
+    try {
+      new TradingView.widget({
+        autosize: true,
+        symbol: tvSymbol,
+        interval: 'D',
+        timezone: 'America/Sao_Paulo',
+        theme: 'dark',
+        style: '1',
+        locale: 'br',
+        toolbar_bg: '#161b22',
+        enable_publishing: false,
+        allow_symbol_change: false,
+        container_id: widgetId,
+        hide_side_toolbar: false,
+        studies: ['RSI@tv-basicstudies', 'MASimple@tv-basicstudies'],
+      });
+      return;
+    } catch (e) {
+      console.warn('Erro ao instanciar TradingView.widget:', e);
+    }
+  }
+
+  // Fallback para iframe oficial TradingView
+  container.innerHTML = `
+    <iframe
+      src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${encodeURIComponent(tvSymbol)}&interval=D&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=161b22&studies=%5B%5D&theme=dark&style=1&timezone=America%2FSao_Paulo&locale=br"
+      style="width:100%;height:100%;border:none;border-radius:8px;"
+      allowtransparency="true"
+      scrolling="no">
+    </iframe>
+  `;
+}
+
+function detailActionCarteira() {
+  if (!currentDetailTicker) return;
+  const stockInfo = getStockInfo(currentDetailTicker);
+  const portItem = state.portfolio.find(p => p.ticker === currentDetailTicker);
+  closeModal('modal-asset-detail');
+  if (portItem) {
+    openEditAssetModal(portItem.id);
+  } else {
+    openAddAssetModal({ ticker: currentDetailTicker, name: stockInfo.name, type: stockInfo.type });
+  }
+}
+
+function detailActionRadar() {
+  if (!currentDetailTicker) return;
+  const stockInfo = getStockInfo(currentDetailTicker);
+  const watchItem = state.watchlist.find(w => w.ticker === currentDetailTicker);
+  closeModal('modal-asset-detail');
+  if (watchItem) {
+    openEditWatchlistModal(watchItem.id);
+  } else {
+    // Pegar preço justo calculado para pré-preencher
+    let target = null;
+    if (stockInfo.lpa && stockInfo.vpa && stockInfo.lpa > 0 && stockInfo.vpa > 0) {
+      target = parseFloat((Math.sqrt(22.5 * stockInfo.lpa * stockInfo.vpa)).toFixed(2));
+    } else if (stockInfo.targetPrice) {
+      target = stockInfo.targetPrice;
+    }
+    openAddWatchlistModal({ ticker: currentDetailTicker, name: stockInfo.name, type: stockInfo.type, targetPrice: target });
+  }
+}
+
+function copyAssetSummary() {
+  if (!currentDetailTicker) return;
+  const stockInfo = getStockInfo(currentDetailTicker);
+  const quote = getStockQuoteData(currentDetailTicker);
+  const priceStr = quote.price != null ? fmtN(quote.price) : 'N/D';
+  const chgStr = quote.change != null ? `${quote.change >= 0 ? '+' : ''}${quote.change.toFixed(2)}%` : '0.00%';
+
+  let summary = `📊 ${currentDetailTicker} — ${stockInfo.name || currentDetailTicker}\n`;
+  summary += `💰 Preço Atual: ${priceStr} (${chgStr})\n`;
+  if (stockInfo.lpa && stockInfo.vpa) {
+    const graham = Math.sqrt(22.5 * stockInfo.lpa * stockInfo.vpa);
+    const upside = quote.price ? (((graham - quote.price) / quote.price) * 100).toFixed(1) : '—';
+    summary += `🎯 Preço Justo (Graham): ${fmtN(graham)} (Upside: ${upside}%)\n`;
+  }
+  if (stockInfo.dy) summary += `📈 Dividend Yield: ${stockInfo.dy.toFixed(2)}%\n`;
+  if (stockInfo.pl) summary += `📉 P/L: ${stockInfo.pl.toFixed(2)} | P/VP: ${(stockInfo.pvp||0).toFixed(2)}\n`;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(summary).then(() => {
+      showToast('Resumo do ativo copiado!', 'success');
+    }).catch(() => prompt('Copie o resumo:', summary));
+  } else {
+    prompt('Copie o resumo:', summary);
   }
 }
 
@@ -1717,12 +2215,12 @@ function renderExplorerTable() {
     return `
     <tr>
       <td>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="openAssetDetail('${s.ticker}')" title="Ver gráfico TradingView e Preço Justo">
           ${renderAssetLogoHtml(s.ticker, 'explorer-logo')}
           <span class="explorer-ticker">${escapeHtml(s.ticker)}</span>
         </div>
       </td>
-      <td><span class="explorer-name" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</span></td>
+      <td><span class="explorer-name" style="cursor:pointer;" onclick="openAssetDetail('${s.ticker}')" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</span></td>
       <td style="color:var(--text-secondary);font-size:.78rem;">${escapeHtml(s.sector)}</td>
       <td class="explorer-price">${priceStr}</td>
       <td>${changeStr}</td>
