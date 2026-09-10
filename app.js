@@ -1264,16 +1264,20 @@ function renderPortfolio() {
 
   const list = document.getElementById('portfolio-items-list');
   const count = document.getElementById('portfolio-count-badge');
-  count.textContent = state.portfolio.length;
+  if (count) {
+    count.textContent = currentFilter === 'ALL' ? state.portfolio.length : `${items.length} de ${state.portfolio.length}`;
+  }
 
   if (items.length === 0) {
+    const catLabels = { STOCK:'Ações', FII:'FIIs', ETF:'ETFs / BDRs', CRYPTO:'Cripto', FIXED:'Renda Fixa', OTHER:'Outros' };
+    const currentCatLabel = catLabels[currentFilter] || '';
     list.innerHTML = `
       <div class="empty-state-box">
         <div class="empty-icon">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
         </div>
-        <div class="empty-title">Carteira vazia</div>
-        <div class="empty-desc">Adicione seu primeiro ativo clicando em "Novo Ativo".</div>
+        <div class="empty-title">${currentFilter !== 'ALL' ? 'Nenhum ativo de ' + currentCatLabel : 'Carteira vazia'}</div>
+        <div class="empty-desc">${currentFilter !== 'ALL' ? 'Você ainda não possui ' + currentCatLabel + ' na carteira. Clique em "Novo Ativo" para adicionar.' : 'Adicione seu primeiro ativo clicando em "Novo Ativo".'}</div>
       </div>`;
     return;
   }
@@ -1390,16 +1394,21 @@ function renderWatchlist() {
   });
 
   const list = document.getElementById('watchlist-items-list');
-  document.getElementById('watchlist-count-badge').textContent = state.watchlist.length;
+  const count = document.getElementById('watchlist-count-badge');
+  if (count) {
+    count.textContent = currentFilter === 'ALL' ? state.watchlist.length : `${items.length} de ${state.watchlist.length}`;
+  }
 
   if (items.length === 0) {
+    const catLabels = { STOCK:'Ações', FII:'FIIs', ETF:'ETFs / BDRs', CRYPTO:'Cripto', FIXED:'Renda Fixa', OTHER:'Outros' };
+    const currentCatLabel = catLabels[currentFilter] || '';
     list.innerHTML = `
       <div class="empty-state-box">
         <div class="empty-icon">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         </div>
-        <div class="empty-title">Radar vazio</div>
-        <div class="empty-desc">Monitore ativos antes de aportar clicando em "Novo Radar".</div>
+        <div class="empty-title">${currentFilter !== 'ALL' ? 'Nenhum ativo de ' + currentCatLabel + ' no Radar' : 'Radar vazio'}</div>
+        <div class="empty-desc">${currentFilter !== 'ALL' ? 'Monitore ativos de ' + currentCatLabel + ' clicando em "Novo Radar".' : 'Monitore ativos antes de aportar clicando em "Novo Radar".'}</div>
       </div>`;
     return;
   }
@@ -1485,7 +1494,13 @@ function renderWatchlist() {
 
 function renderFavoritosWidget() {
   const container = document.getElementById('favoritos-scroll');
-  const items = state.watchlist.slice(0, 8);
+  if (!container) return;
+
+  let items = [...state.watchlist];
+  if (currentFilter !== 'ALL') {
+    items = items.filter(a => a.type === currentFilter);
+  }
+  items = items.slice(0, 10);
 
   if (items.length === 0) {
     container.innerHTML = `
@@ -1493,7 +1508,7 @@ function renderFavoritosWidget() {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
         </svg>
-        Adicione ativos ao Radar para vê-los aqui
+        ${currentFilter !== 'ALL' ? 'Nenhum ativo desta categoria no Radar' : 'Adicione ativos ao Radar para vê-los aqui'}
       </div>`;
     return;
   }
@@ -1540,33 +1555,53 @@ function renderFavoritosWidget() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   WIDGET MAIOR VOLUME — B3
+   WIDGET MAIOR VOLUME — B3 & MERCADOS
    ═══════════════════════════════════════════════════════════ */
 
-// Ativos de maior volume médio diário na B3 (blue chips + liquidez)
-const TOP_VOLUME_TICKERS = [
-  'PETR4','VALE3','ITUB4','BBDC4','B3SA3','ABEV3','WEGE3','BBAS3',
-  'ELET3','RENT3','LREN3','MGLU3','CSAN3','VBBR3','PRIO3','RAIZ4',
-  'EMBR3','GGBR4','CSNA3','USIM5',
-];
+// Ativos de maior volume médio diário por categoria
+const MARKET_CATEGORY_TICKERS = {
+  ALL: {
+    volume: ['PETR4','VALE3','ITUB4','BBDC4','B3SA3','ABEV3','WEGE3','BBAS3','ALUP4','HGLG11','MXRF11','BOVA11','IVVB11','BTC','ETH'],
+    value:  ['PETR4','VALE3','ITUB4','BBAS3','WEGE3','ALUP11','RADL3','SUZB3','EMBR3','HGLG11','KNIP11','IVVB11','AAPL34','BTC','MSFT34'],
+  },
+  STOCK: {
+    volume: ['PETR4','VALE3','ITUB4','BBDC4','B3SA3','ABEV3','WEGE3','BBAS3','ELET3','RENT3','ALUP4','LREN3','MGLU3','CSAN3','VBBR3','PRIO3','EMBR3','GGBR4','CSNA3','USIM5','CPFE3','ENGI11'],
+    value:  ['PETR4','VALE3','ITUB4','BBAS3','WEGE3','RENT3','ABEV3','B3SA3','BBDC4','ALUP11','ALUP4','RADL3','SUZB3','EMBR3','EQTL3','CPLE6','EGIE3','TAEE11','TOTS3','FLRY3','PSSA3'],
+  },
+  FII: {
+    volume: ['MXRF11','HGLG11','BTLG11','XPML11','KNCR11','CPTS11','VISC11','TRXF11','TGAR11','VGIR11','XPLG11','KNIP11','HGRU11','SNAG11'],
+    value:  ['KNIP11','KNCR11','HGLG11','KNRI11','XPML11','BTLG11','VISC11','MXRF11','TRXF11','XPLG11','HGRU11','TGAR11'],
+  },
+  ETF: {
+    volume: ['BOVA11','IVVB11','SMAL11','HASH11','SPXI11','NASD11','GOLD11','AAPL34','NVDC34','MSFT34','AMZO34','GOGL34','TSLA34','MELI34'],
+    value:  ['IVVB11','BOVA11','SPXI11','AAPL34','MSFT34','NVDC34','AMZO34','GOGL34','META34','TSLA34','MELI34','HASH11'],
+  },
+  CRYPTO: {
+    volume: ['BTC','ETH','SOL','HASH11','BITH11','ETHE11'],
+    value:  ['BTC','ETH','SOL','HASH11','BITH11','ETHE11'],
+  },
+  FIXED: {
+    volume: ['KNCR11','VGIR11','SNAG11','KNIP11','CPTS11'],
+    value:  ['KNCR11','KNIP11','SNAG11','VGIR11','CPTS11'],
+  }
+};
 
-// Ativos de maior valor de mercado (blue chips by mkt cap)
-const TOP_VALUE_TICKERS = [
-  'PETR4','VALE3','ITUB4','BBAS3','WEGE3','RENT3','ABEV3','B3SA3',
-  'BBDC4','RADL3','SUZB3','EMBR3','EQTL3','CPLE6','EGIE3','TAEE11',
-  'TOTS3','FLRY3','PSSA3','CMIN3',
-];
+function getActiveTickersForCategory(type) {
+  const cat = MARKET_CATEGORY_TICKERS[currentFilter] || MARKET_CATEGORY_TICKERS.ALL;
+  return cat[type] || MARKET_CATEGORY_TICKERS.ALL[type];
+}
 
-function _renderMarketWidget(containerId, tickers, accentColor) {
+function _renderMarketWidget(containerId, tickerList, accentColor) {
   const container = document.getElementById(containerId);
   if (!container) return;
   const marketOpen = isB3MarketOpen();
+  const tickers = tickerList || [];
 
   container.innerHTML = tickers.map(ticker => {
     const info  = getStockInfo(ticker);
     const quote = getStockQuoteData(ticker);
     const price = quote?.price ?? null;
-    const chg   = quote?.changePercent ?? null;
+    const chg   = quote?.changePercent ?? quote?.change ?? null;
     const isClosedVal = !marketOpen || quote?.isClosed;
     const chgClass = chg == null ? 'neutral' : chg >= 0 ? 'pos' : 'neg';
     const chgHtml  = chg != null
@@ -1594,18 +1629,20 @@ function _renderMarketWidget(containerId, tickers, accentColor) {
 
   enableScrollDrag(containerId);
 
-  // Buscar cotações em background
   QuoteService.getQuotes(tickers).then(quotes => {
     let updated = false;
     tickers.forEach(t => {
       if (quotes[t]?.price) { bestPrices[t] = quotes[t]; updated = true; }
     });
-    if (updated) _renderMarketWidget(containerId, tickers, accentColor);
+    if (updated && container) {
+      // Re-renderizar suavemente apenas se o container ainda estiver visível
+      _renderMarketWidget(containerId, tickers, accentColor);
+    }
   });
 }
 
-function renderVolumeWidget()   { _renderMarketWidget('volume-scroll',   TOP_VOLUME_TICKERS, 'var(--accent-blue)'); }
-function renderTopValueWidget() { _renderMarketWidget('topvalue-scroll', TOP_VALUE_TICKERS,  'var(--accent-green)'); }
+function renderVolumeWidget()   { _renderMarketWidget('volume-scroll',   getActiveTickersForCategory('volume'), 'var(--accent-blue)'); }
+function renderTopValueWidget() { _renderMarketWidget('topvalue-scroll', getActiveTickersForCategory('value'),  'var(--accent-green)'); }
 
 /* ═══════════════════════════════════════════════════════════
    WIDGET BEST — SELEÇÃO PESSOAL (Editável)
@@ -1617,6 +1654,22 @@ function renderBestWidget() {
 
   if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
     state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+  }
+
+  // Filtrar itens do Best se houver filtro ativo diferente de ALL
+  let items = [...state.best];
+  if (currentFilter !== 'ALL') {
+    const filtered = items.filter(b => {
+      const info = getStockInfo(b.ticker);
+      return info.type === currentFilter;
+    });
+    // Se o usuário tiver itens do tipo selecionado no Best, exibe eles; caso contrário, exibe os principais ativos da categoria
+    if (filtered.length > 0) {
+      items = filtered;
+    } else {
+      const topCat = getActiveTickersForCategory('volume').slice(0, 8);
+      items = topCat.map(t => ({ ticker: t, name: getStockInfo(t).name || t }));
+    }
   }
 
   const marketOpen = isB3MarketOpen();
@@ -1632,7 +1685,7 @@ function renderBestWidget() {
       : 'B3 fechada. Exibindo o último valor de mercado registrado antes do fechamento.';
   }
 
-  container.innerHTML = state.best.map(item => {
+  container.innerHTML = items.map(item => {
     const q = getStockQuoteData(item.ticker);
     const price = q.price != null ? fmtN(q.price) : '—';
     const chg = q.change;
@@ -1649,13 +1702,11 @@ function renderBestWidget() {
             <div class="best-name" title="${escapeHtml(item.name || q.name || item.ticker)}">${escapeHtml(item.name || q.name || item.ticker)}</div>
           </div>
         </div>
-        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:2px;">
-          <div class="best-price">${price}</div>
-          <div class="best-change ${chgClass}">${chgText}</div>
-        </div>
+        <div class="best-price">${price}</div>
         <div class="best-market-sub">
+          <span class="best-change ${chgClass}">${chgText}</span>
           <span class="best-badge-status ${isClosedVal ? 'closed' : 'open'}">
-            ${isClosedVal ? 'Últ. Fechamento' : 'Em Negociação'}
+            ${isClosedVal ? 'Fechado' : 'Ao vivo'}
           </span>
         </div>
       </div>
@@ -2780,6 +2831,10 @@ document.querySelectorAll('[data-category]').forEach(btn => {
     currentFilter = btn.dataset.category;
     renderPortfolio();
     renderWatchlist();
+    renderBestWidget();
+    renderFavoritosWidget();
+    renderVolumeWidget();
+    renderTopValueWidget();
   });
 });
 
@@ -2788,6 +2843,42 @@ document.getElementById('search-assets').addEventListener('input', e => {
   renderPortfolio();
   renderWatchlist();
 });
+
+// Auto-preenchimento inteligente ao digitar ticker nos formulários
+function setupTickerAutoComplete(tickerInputId, nameInputId, typeSelectId) {
+  const tickerInput = document.getElementById(tickerInputId);
+  const nameInput   = document.getElementById(nameInputId);
+  const typeSelect  = document.getElementById(typeSelectId);
+
+  if (!tickerInput || !nameInput || !typeSelect) return;
+
+  tickerInput.addEventListener('input', (e) => {
+    const val = (e.target.value || '').toUpperCase().trim();
+    if (val.length >= 2) {
+      const info = getStockInfo(val);
+      if (info && info.name && info.name !== val) {
+        if (!nameInput.value || nameInput.value === val) {
+          nameInput.value = info.name;
+        }
+        if (info.type) {
+          typeSelect.value = info.type;
+        }
+      } else {
+        // Detecção automática de tipo por padrão de ticker
+        if (val.endsWith('11') && !val.startsWith('BOVA') && !val.startsWith('IVVB') && !val.startsWith('HASH') && !val.startsWith('SMAL') && !val.startsWith('SPXI') && !val.startsWith('BITH') && !val.startsWith('ETHE')) {
+          typeSelect.value = 'FII';
+        } else if (val.endsWith('34') || val.startsWith('BOVA') || val.startsWith('IVVB') || val.startsWith('HASH') || val.startsWith('SMAL') || val.startsWith('SPXI')) {
+          typeSelect.value = 'ETF';
+        } else if (['BTC','ETH','SOL','BNB','XRP','ADA','DOGE'].includes(val)) {
+          typeSelect.value = 'CRYPTO';
+        }
+      }
+    }
+  });
+}
+
+setupTickerAutoComplete('asset-ticker', 'asset-name', 'asset-type');
+setupTickerAutoComplete('watchlist-ticker', 'watchlist-name', 'watchlist-type');
 
 /* ═══════════════════════════════════════════════════════════
    BACKUP & RESTAURAÇÃO
@@ -2841,28 +2932,38 @@ function clearDatabase() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   DADOS INICIAIS (Demo)
+   DADOS INICIAIS (Demo Completo: Ações, FIIs, ETFs, Cripto)
    ═══════════════════════════════════════════════════════════ */
 
 function initDefaultData() {
   if (state.portfolio.length === 0 && state.watchlist.length === 0) {
     state.portfolio = [
       { id: genId(), ticker: 'PETR4', name: 'Petrobras PN', type: 'STOCK', quantity: 100, avgPrice: 35.5, currentPrice: 37.0, notes: 'Dividendos consistentes' },
-      { id: genId(), ticker: 'VALE3', name: 'Vale S.A.', type: 'STOCK', quantity: 50, avgPrice: 68.0, currentPrice: 65.0, notes: 'Commodities — risco cambial' },
-      { id: genId(), ticker: 'HGLG11', name: 'CSHG Logística', type: 'FII', quantity: 20, avgPrice: 162.0, currentPrice: 168.0, notes: 'DY mensal' },
-      { id: genId(), ticker: 'WEGE3', name: 'WEG S.A.', type: 'STOCK', quantity: 30, avgPrice: 42.0, currentPrice: 45.0, notes: 'Crescimento internacional' },
-      { id: genId(), ticker: 'BOVA11', name: 'iShares Ibovespa ETF', type: 'ETF', quantity: 40, avgPrice: 120.0, currentPrice: 125.0, notes: 'Diversificação ampla' },
+      { id: genId(), ticker: 'ALUP4', name: 'Alupar PN', type: 'STOCK', quantity: 80, avgPrice: 28.5, currentPrice: 30.2, notes: 'Transmissão de energia previsível' },
+      { id: genId(), ticker: 'VALE3', name: 'Vale S.A.', type: 'STOCK', quantity: 50, avgPrice: 68.0, currentPrice: 65.0, notes: 'Commodities — minério de ferro' },
+      { id: genId(), ticker: 'BBAS3', name: 'Banco do Brasil S.A.', type: 'STOCK', quantity: 60, avgPrice: 26.0, currentPrice: 28.4, notes: 'Dividendos e valuation atrativo' },
+      { id: genId(), ticker: 'WEGE3', name: 'WEG S.A.', type: 'STOCK', quantity: 30, avgPrice: 42.0, currentPrice: 45.0, notes: 'Crescimento e inovação' },
+      { id: genId(), ticker: 'HGLG11', name: 'CSHG Logística', type: 'FII', quantity: 20, avgPrice: 162.0, currentPrice: 168.0, notes: 'Galpões logísticos classe A+' },
+      { id: genId(), ticker: 'MXRF11', name: 'Maxi Renda', type: 'FII', quantity: 250, avgPrice: 10.2, currentPrice: 10.5, notes: 'Rendimento mensal de CRI' },
+      { id: genId(), ticker: 'XPML11', name: 'XP Malls', type: 'FII', quantity: 25, avgPrice: 112.0, currentPrice: 116.0, notes: 'Shoppings premium' },
+      { id: genId(), ticker: 'BOVA11', name: 'iShares Ibovespa ETF', type: 'ETF', quantity: 30, avgPrice: 120.0, currentPrice: 125.0, notes: 'Diversificação no mercado Brasil' },
+      { id: genId(), ticker: 'IVVB11', name: 'iShares S&P 500 ETF', type: 'ETF', quantity: 15, avgPrice: 310.0, currentPrice: 345.0, notes: 'Exposição a dólar e S&P 500' },
+      { id: genId(), ticker: 'BTC', name: 'Bitcoin', type: 'CRYPTO', quantity: 0.05, avgPrice: 320000.0, currentPrice: 360000.0, notes: 'Reserva digital descentralizada' },
     ];
     state.watchlist = [
-      { id: genId(), ticker: 'ITUB4', name: 'Itaú Unibanco PN', type: 'STOCK', targetPrice: 32.0, currentPrice: null, notes: 'Aguardando preço de entrada' },
-      { id: genId(), ticker: 'XPLG11', name: 'XP Log', type: 'FII', targetPrice: 108.0, currentPrice: null, notes: 'Logística — boa gestão' },
-      { id: genId(), ticker: 'PRIO3', name: 'PRIO S.A.', type: 'STOCK', targetPrice: 50.0, currentPrice: null, notes: 'Petróleo independente' },
+      { id: genId(), ticker: 'ALUP11', name: 'Alupar Unit', type: 'STOCK', targetPrice: 32.0, currentPrice: null, rank: 1, notes: 'Comprar se atingir preço teto' },
+      { id: genId(), ticker: 'ITUB4', name: 'Itaú Unibanco PN', type: 'STOCK', targetPrice: 33.0, currentPrice: null, rank: 2, notes: 'Aguardando correção' },
+      { id: genId(), ticker: 'BTLG11', name: 'BTG Pactual Logística', type: 'FII', targetPrice: 102.0, currentPrice: null, rank: 3, notes: 'FII logístico raio 30km SP' },
+      { id: genId(), ticker: 'KNCR11', name: 'Kinea Rendimentos', type: 'FII', targetPrice: 104.0, currentPrice: null, rank: 4, notes: 'Indexado ao CDI' },
+      { id: genId(), ticker: 'HASH11', name: 'Hashdex Nasdaq Crypto', type: 'ETF', targetPrice: 52.0, currentPrice: null, rank: 5, notes: 'Cripto regulado na B3' },
+      { id: genId(), ticker: 'ETH', name: 'Ethereum', type: 'CRYPTO', targetPrice: 18000.0, currentPrice: null, rank: 6, notes: 'Líder em contratos inteligentes' },
     ];
   }
   if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
     state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
   }
 }
+
 
 /* ═══════════════════════════════════════════════════════════
    MODAIS
