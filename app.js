@@ -11,7 +11,7 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION        = '1.6.5';
+const APP_VERSION        = '1.7.0';
 const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
 const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
 const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
@@ -1284,17 +1284,21 @@ function switchTab(tab) {
   document.getElementById('summary-hero-card').style.display = showSummary ? '' : 'none';
   document.getElementById('toolbar-section').style.display   = showToolbar ? '' : 'none';
 
-  // Configurações: esconder summary e toolbar
-  if (tab === 'config' || tab === 'explorer') {
+  // Configurações, Explorer, Relatórios e Metas: esconder toolbar
+  if (tab === 'config' || tab === 'explorer' || tab === 'reports' || tab === 'goals') {
+    document.getElementById('toolbar-section').style.display = 'none';
+  }
+  if (tab === 'config' || tab === 'explorer' || tab === 'goals') {
     document.getElementById('summary-hero-card').style.display = 'none';
-    document.getElementById('toolbar-section').style.display   = 'none';
   }
 
   if (tab === 'explorer') renderExplorerTable();
   if (tab === 'reports')  renderReports();
+  if (tab === 'goals')    renderGoalsView();
   if (tab === 'carteira') {
     renderBestWidget();
     renderFavoritosWidget();
+    renderHeroGoalsBadge();
   }
 }
 
@@ -1471,6 +1475,7 @@ function renderSummary() {
     now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   renderAllocation();
+  renderHeroGoalsBadge(totalAtual);
 }
 
 function renderAllocation() {
@@ -3250,6 +3255,17 @@ function initDefaultData() {
    ═══════════════════════════════════════════════════════════ */
 
 function openModal(id) {
+  if (id === 'modal-goals-config') {
+    const g = getGoalsState();
+    const retInput = document.getElementById('cfg-retirement-goal');
+    const pasInput = document.getElementById('cfg-target-passive');
+    const livInput = document.getElementById('cfg-cost-of-living');
+    const yldInput = document.getElementById('cfg-estimated-yield');
+    if (retInput) retInput.value = g.retirementTarget || 1000000;
+    if (pasInput) pasInput.value = g.targetPassiveIncome || 5000;
+    if (livInput) livInput.value = g.costOfLiving || 3500;
+    if (yldInput) yldInput.value = g.estimatedMonthlyYield || 0.60;
+  }
   document.getElementById(id).classList.add('active');
 }
 
@@ -3531,8 +3547,511 @@ function renderMonthlyGoalProgress() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   RENDER PRINCIPAL
+   MÓDULO: METAS DE APOSENTADORIA & ALVOS INTERATIVOS
    ═══════════════════════════════════════════════════════════ */
+
+const MOTIVATIONAL_QUOTES = [
+  { quote: "Cada centavo investido hoje é um soldado trabalhando 24h por dia pela sua liberdade amanhã.", author: "Mentalidade Investidora" },
+  { quote: "O primeiro milhão é o mais difícil porque você trabalha pelo dinheiro. Os seguintes acontecem porque o dinheiro trabalha por você.", author: "Charlie Munger" },
+  { quote: "A riqueza é o que você não vê: são as escolhas silenciosas de economizar para poder comprar seu próprio tempo.", author: "Morgan Housel" },
+  { quote: "A melhor época para plantar uma árvore foi há 20 anos. O segundo melhor momento é agora.", author: "Provérbio" },
+  { quote: "Os juros compostos são a oitava maravilha do mundo. Aquele que entende, ganha; aquele que não entende, paga.", author: "Albert Einstein" },
+  { quote: "Não economize o que sobra depois de gastar, mas gaste o que sobra depois de investir.", author: "Warren Buffett" },
+  { quote: "A liberdade financeira não é sobre ostentação, é sobre a paz de ser dono do seu próprio destino.", author: "Independência Financeira" },
+  { quote: "Com consistência e paciência, o efeito bola de neve transforma pequenos aportes em fortunas inevitáveis.", author: "Poder dos Aportes" }
+];
+
+const DEFAULT_MILESTONES = [
+  { level: 1, name: "Pé de Meia", target: 10000, icon: "🛡️", desc: "A primeira barreira da segurança financeira pessoal." },
+  { level: 2, name: "Primeiros Passos", target: 50000, icon: "🌱", desc: "O hábito consistente de investir consolidado." },
+  { level: 3, name: "A Barreira dos 100k", target: 100000, icon: "🚀", desc: "O marco mais difícil! A partir daqui a bola de neve acelera." },
+  { level: 4, name: "O Efeito Bola de Neve", target: 250000, icon: "❄️", desc: "Os rendimentos mensais começam a superar o valor do seu aporte." },
+  { level: 5, name: "Meio Milhão", target: 500000, icon: "💎", desc: "Reta final da independência. Liberdade parcial garantida." },
+  { level: 6, name: "Aposentadoria & Liberdade", target: 1000000, icon: "👑", desc: "Independência financeira plena! Seus dividendos pagam sua vida." }
+];
+
+function getGoalsState() {
+  if (!state.goals || typeof state.goals !== 'object') {
+    state.goals = {
+      retirementTarget: 1000000,
+      targetPassiveIncome: 5000,
+      costOfLiving: 3500,
+      estimatedMonthlyYield: 0.60,
+      customTargets: [
+        { id: 't-reserva', title: 'Reserva de Emergência', category: '🛡️', amount: 20000, saved: 12000 },
+        { id: 't-viagem', title: 'Viagem dos Sonhos', category: '✈️', amount: 15000, saved: 5500 }
+      ]
+    };
+  }
+  if (!Array.isArray(state.goals.customTargets)) state.goals.customTargets = [];
+  if (!state.goals.retirementTarget) state.goals.retirementTarget = 1000000;
+  if (!state.goals.targetPassiveIncome) state.goals.targetPassiveIncome = 5000;
+  if (!state.goals.costOfLiving) state.goals.costOfLiving = 3500;
+  if (!state.goals.estimatedMonthlyYield) state.goals.estimatedMonthlyYield = 0.60;
+  return state.goals;
+}
+
+function calculateCurrentPortfolioTotal() {
+  let total = 0;
+  for (const a of (state.portfolio || [])) {
+    const qty = parseFloat(a.quantity) || 0;
+    const avg = parseFloat(a.avgPrice) || 0;
+    const quote = getStockQuoteData(a.ticker);
+    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice)
+      : (quote?.price != null ? quote.price : avg);
+    total += qty * cur;
+  }
+  return total;
+}
+
+function renderHeroGoalsBadge(totalOverride) {
+  const badgeEl = document.getElementById('hero-goals-badge');
+  if (!badgeEl) return;
+
+  const g = getGoalsState();
+  const total = totalOverride != null ? totalOverride : calculateCurrentPortfolioTotal();
+  const retirementGoal = parseFloat(g.retirementTarget) || 1000000;
+  const pct = Math.min((total / retirementGoal) * 100, 100);
+
+  const pctEl = document.getElementById('hgb-pct');
+  const descEl = document.getElementById('hgb-desc');
+
+  if (pctEl) pctEl.textContent = `${pct.toFixed(1)}%`;
+
+  // Descobrir próximo marco
+  let nextMilestone = DEFAULT_MILESTONES[DEFAULT_MILESTONES.length - 1];
+  for (const m of DEFAULT_MILESTONES) {
+    if (total < m.target) {
+      nextMilestone = m;
+      break;
+    }
+  }
+
+  if (descEl) {
+    if (total >= retirementGoal) {
+      descEl.textContent = '👑 Meta de Aposentadoria Conquistada! Parabéns!';
+    } else {
+      const missing = nextMilestone.target - total;
+      descEl.textContent = `${nextMilestone.icon} Próximo Marco: ${fmt(nextMilestone.target)} · Faltam ${fmt(missing)}`;
+    }
+  }
+}
+
+function renderGoalsView() {
+  const g = getGoalsState();
+  const total = calculateCurrentPortfolioTotal();
+  const retirementGoal = parseFloat(g.retirementTarget) || 1000000;
+  const targetPassive = parseFloat(g.targetPassiveIncome) || 5000;
+  const costOfLiving = parseFloat(g.costOfLiving) || 3500;
+  const monthlyYieldRate = (parseFloat(g.estimatedMonthlyYield) || 0.60) / 100;
+
+  const currentPassiveMonthly = total * monthlyYieldRate;
+  const pctOfRetirement = Math.min((total / retirementGoal) * 100, 100);
+  const passivePct = targetPassive > 0 ? Math.min((currentPassiveMonthly / targetPassive) * 100, 100) : 0;
+  const coverageMonths = costOfLiving > 0 ? (total / costOfLiving) : 0;
+
+  // 1. Termômetro Principal
+  const mainPctEl = document.getElementById('freedom-main-pct');
+  const barFillEl = document.getElementById('freedom-bar-fill');
+  const statusBadgeEl = document.getElementById('freedom-status-badge');
+  const markerMidEl = document.getElementById('freedom-marker-mid');
+  const markerGoalEl = document.getElementById('freedom-marker-goal');
+
+  if (mainPctEl) mainPctEl.textContent = `${pctOfRetirement.toFixed(1)}%`;
+  if (barFillEl) barFillEl.style.width = `${pctOfRetirement}%`;
+  if (markerMidEl) markerMidEl.textContent = fmt(retirementGoal / 2);
+  if (markerGoalEl) markerGoalEl.textContent = `Meta: ${fmt(retirementGoal)}`;
+
+  if (statusBadgeEl) {
+    if (pctOfRetirement >= 100) {
+      statusBadgeEl.textContent = '👑 Nível 6: Liberdade Plena Conquistada!';
+      statusBadgeEl.className = 'freedom-status-badge level-6';
+    } else if (pctOfRetirement >= 50) {
+      statusBadgeEl.textContent = '💎 Nível 5: Reta Final da Independência';
+      statusBadgeEl.className = 'freedom-status-badge level-5';
+    } else if (pctOfRetirement >= 25) {
+      statusBadgeEl.textContent = '❄️ Nível 4: O Efeito Bola de Neve';
+      statusBadgeEl.className = 'freedom-status-badge level-4';
+    } else if (pctOfRetirement >= 10) {
+      statusBadgeEl.textContent = '🚀 Nível 3: Rompendo a Barreira';
+      statusBadgeEl.className = 'freedom-status-badge level-3';
+    } else if (pctOfRetirement >= 5) {
+      statusBadgeEl.textContent = '🌱 Nível 2: Hábito Consistente';
+      statusBadgeEl.className = 'freedom-status-badge level-2';
+    } else {
+      statusBadgeEl.textContent = '🛡️ Nível 1: Construindo a Base';
+      statusBadgeEl.className = 'freedom-status-badge level-1';
+    }
+  }
+
+  // 2. Grid de Métricas
+  const curEl = document.getElementById('f-metric-current');
+  const missingEl = document.getElementById('f-metric-missing');
+  const passiveEl = document.getElementById('f-metric-passive');
+  const targetPassiveEl = document.getElementById('f-metric-target-passive');
+  const passivePctEl = document.getElementById('f-metric-passive-pct');
+  const coverageEl = document.getElementById('f-metric-coverage');
+  const coverageHintEl = document.getElementById('f-metric-coverage-hint');
+
+  if (curEl) curEl.textContent = fmt(total);
+  if (missingEl) {
+    const miss = Math.max(retirementGoal - total, 0);
+    missingEl.textContent = miss > 0 ? `Faltam ${fmt(miss)}` : '🎉 Meta Atingida!';
+  }
+  if (passiveEl) passiveEl.textContent = `${fmt(currentPassiveMonthly)} /mês`;
+  if (targetPassiveEl) targetPassiveEl.textContent = `${fmt(targetPassive)} /mês`;
+  if (passivePctEl) passivePctEl.textContent = `${passivePct.toFixed(1)}% da renda passiva almejada`;
+  
+  if (coverageEl) {
+    if (coverageMonths >= 12) {
+      const years = (coverageMonths / 12).toFixed(1);
+      coverageEl.textContent = `${years} anos de vida`;
+    } else {
+      coverageEl.textContent = `${coverageMonths.toFixed(1)} meses de vida`;
+    }
+  }
+  if (coverageHintEl) coverageHintEl.textContent = `Cobrindo ${fmt(costOfLiving)}/mês de despesas`;
+
+  // 3. Renderizar Milestones Gamificados
+  renderMilestones(total, retirementGoal);
+
+  // 4. Renderizar Alvos Personalizados
+  renderCustomTargets(total);
+
+  // 5. Atualizar Simulador
+  updateFreedomSimulator();
+}
+
+function renderMilestones(currentTotal, maxGoal) {
+  const container = document.getElementById('milestones-grid');
+  if (!container) return;
+
+  const milestones = DEFAULT_MILESTONES.map(m => {
+    // Se a meta de aposentadoria do usuário for diferente de 1M, ajusta o último nível
+    if (m.level === 6 && maxGoal) return { ...m, target: maxGoal };
+    return m;
+  });
+
+  container.innerHTML = milestones.map(m => {
+    const isCompleted = currentTotal >= m.target;
+    const isCurrent = !isCompleted && (milestones.find(x => currentTotal < x.target) || {}).level === m.level;
+    const pct = Math.min((currentTotal / m.target) * 100, 100);
+    const missing = Math.max(m.target - currentTotal, 0);
+
+    let statusHtml = '';
+    let cardClass = 'milestone-card';
+
+    if (isCompleted) {
+      cardClass += ' completed';
+      statusHtml = `<span class="milestone-badge completed"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Conquistado</span>`;
+    } else if (isCurrent) {
+      cardClass += ' in-progress';
+      statusHtml = `<span class="milestone-badge current">🔥 Em Andamento (${pct.toFixed(0)}%)</span>`;
+    } else {
+      cardClass += ' locked';
+      statusHtml = `<span class="milestone-badge locked">🔒 Bloqueado</span>`;
+    }
+
+    return `
+      <div class="${cardClass}">
+        <div class="milestone-top">
+          <div class="milestone-icon-wrap">${m.icon}</div>
+          <div class="milestone-info">
+            <div class="milestone-level">Nível ${m.level}</div>
+            <div class="milestone-title">${m.name}</div>
+          </div>
+          ${statusHtml}
+        </div>
+        <div class="milestone-target-val">${fmt(m.target)}</div>
+        <div class="milestone-desc">${m.desc}</div>
+        <div class="milestone-progress-bar">
+          <div class="milestone-progress-fill" style="width: ${pct}%;"></div>
+        </div>
+        <div class="milestone-footer">
+          <span>${pct.toFixed(1)}% atingido</span>
+          <span>${isCompleted ? '✓ Concluído' : `Faltam ${fmt(missing)}`}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderCustomTargets(currentTotal) {
+  const container = document.getElementById('custom-targets-grid');
+  if (!container) return;
+
+  const g = getGoalsState();
+  const list = g.customTargets || [];
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div class="empty-custom-targets" style="grid-column: 1/-1; padding: 24px; text-align: center; background: var(--bg-card); border: 1px dashed var(--border-card); border-radius: var(--radius-md); color: var(--text-muted);">
+        <div style="font-size: 1.4rem; margin-bottom: 6px;">✨</div>
+        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Nenhum alvo personalizado cadastrado</div>
+        <div style="font-size: 0.78rem; margin-bottom: 12px;">Defina metas como Reserva de Emergência, Viagem dos Sonhos, Carro Novo ou Imóvel.</div>
+        <button class="btn-secondary" onclick="openAddCustomTargetModal()" style="font-size:0.75rem;">+ Adicionar Primeiro Alvo</button>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(t => {
+    const saved = parseFloat(t.saved) || 0;
+    const amount = parseFloat(t.amount) || 1;
+    const pct = Math.min((saved / amount) * 100, 100);
+    const missing = Math.max(amount - saved, 0);
+    const isDone = saved >= amount;
+
+    return `
+      <div class="custom-target-card ${isDone ? 'done' : ''}">
+        <div class="ct-header">
+          <div class="ct-title-wrap">
+            <span class="ct-icon">${t.category || '🎯'}</span>
+            <div>
+              <div class="ct-title">${escapeHtml(t.title)}</div>
+              ${t.deadline ? `<div class="ct-date">Meta até: ${new Date(t.deadline + 'T00:00:00').toLocaleDateString('pt-BR')}</div>` : ''}
+            </div>
+          </div>
+          <div class="ct-actions">
+            <button class="action-btn-sm" onclick="openEditCustomTargetModal('${t.id}')" title="Editar">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="action-btn-sm delete" onclick="deleteCustomTarget('${t.id}')" title="Remover">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="ct-values">
+          <span class="ct-saved">${fmt(saved)}</span>
+          <span class="ct-total">de ${fmt(amount)}</span>
+        </div>
+
+        <div class="ct-progress-bar">
+          <div class="ct-progress-fill ${isDone ? 'done' : ''}" style="width: ${pct}%;"></div>
+        </div>
+
+        <div class="ct-footer">
+          <span>${pct.toFixed(0)}% concluído</span>
+          <span>${isDone ? '🎉 Conquistado!' : `Faltam ${fmt(missing)}`}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ─── Simulador Interativo de Aposentadoria ───────────────────── */
+function syncSimAporte(val) {
+  const v = parseFloat(val) || 0;
+  const s1 = document.getElementById('sim-aporte-slider');
+  const n1 = document.getElementById('sim-aporte');
+  if (s1 && s1.value != v) s1.value = Math.min(Math.max(v, 100), 20000);
+  if (n1 && n1.value != v) n1.value = v;
+  updateFreedomSimulator();
+}
+
+function syncSimRate(val) {
+  const v = parseFloat(val) || 0;
+  const s2 = document.getElementById('sim-rate-slider');
+  const n2 = document.getElementById('sim-rate');
+  if (s2 && s2.value != v) s2.value = Math.min(Math.max(v, 6), 20);
+  if (n2 && n2.value != v) n2.value = v;
+  updateFreedomSimulator();
+}
+
+function updateFreedomSimulator() {
+  const g = getGoalsState();
+  const currentTotal = calculateCurrentPortfolioTotal();
+  const targetGoal = parseFloat(g.retirementTarget) || 1000000;
+  
+  const aporteInput = document.getElementById('sim-aporte');
+  const rateInput = document.getElementById('sim-rate');
+
+  const pmt = aporteInput ? (parseFloat(aporteInput.value) || 1500) : 1500;
+  const annualRate = rateInput ? (parseFloat(rateInput.value) || 11) : 11;
+  const monthlyRate = Math.pow(1 + (annualRate / 100), 1 / 12) - 1;
+
+  const resultTimeEl = document.getElementById('sim-time-result');
+  const totalInvestidoEl = document.getElementById('sim-total-investido');
+  const totalJurosEl = document.getElementById('sim-total-juros');
+  const barPrincipalEl = document.getElementById('sim-bar-principal');
+  const barJurosEl = document.getElementById('sim-bar-juros');
+
+  if (currentTotal >= targetGoal) {
+    if (resultTimeEl) resultTimeEl.innerHTML = `🎉 <strong>Parabéns!</strong> Você já atingiu sua meta de aposentadoria de <strong>${fmt(targetGoal)}</strong>!`;
+    if (totalInvestidoEl) totalInvestidoEl.textContent = fmt(currentTotal);
+    if (totalJurosEl) totalJurosEl.textContent = 'Meta Conquistada';
+    return;
+  }
+
+  // Simular mês a mês até atingir a meta
+  let balance = currentTotal;
+  let months = 0;
+  let totalContributed = currentTotal;
+  const MAX_MONTHS = 1200; // 100 anos
+
+  while (balance < targetGoal && months < MAX_MONTHS) {
+    balance = balance * (1 + monthlyRate) + pmt;
+    totalContributed += pmt;
+    months++;
+  }
+
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
+  const interestEarned = Math.max(targetGoal - totalContributed, 0);
+  const principalPct = Math.min((totalContributed / targetGoal) * 100, 100);
+  const jurosPct = Math.max(100 - principalPct, 0);
+
+  if (resultTimeEl) {
+    let timeStr = '';
+    if (years > 0 && remMonths > 0) timeStr = `<strong>${years} anos</strong> e <strong>${remMonths} meses</strong>`;
+    else if (years > 0) timeStr = `<strong>${years} anos</strong>`;
+    else timeStr = `<strong>${remMonths} meses</strong>`;
+
+    resultTimeEl.innerHTML = `
+      ⏱ Com aportes de <strong>${fmt(pmt)}/mês</strong> a <strong>${annualRate.toFixed(1)}% a.a.</strong>, você atinge sua meta de <strong>${fmt(targetGoal)}</strong> em ${timeStr}!
+    `;
+  }
+
+  if (totalInvestidoEl) totalInvestidoEl.textContent = fmt(totalContributed);
+  if (totalJurosEl) totalJurosEl.textContent = fmt(interestEarned);
+
+  if (barPrincipalEl) {
+    barPrincipalEl.style.width = `${principalPct}%`;
+    barPrincipalEl.title = `Aportes do seu bolso: ${principalPct.toFixed(1)}%`;
+  }
+  if (barJurosEl) {
+    barJurosEl.style.width = `${jurosPct}%`;
+    barJurosEl.title = `Juros Compostos: ${jurosPct.toFixed(1)}%`;
+  }
+}
+
+function refreshMotivationQuote() {
+  const quoteEl = document.getElementById('motivation-quote');
+  const subEl = document.getElementById('motivation-sub');
+  if (!quoteEl) return;
+
+  const rand = MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+  quoteEl.style.opacity = '0';
+  setTimeout(() => {
+    quoteEl.textContent = `"${rand.quote}"`;
+    if (subEl) subEl.textContent = `— ${rand.author}`;
+    quoteEl.style.opacity = '1';
+  }, 150);
+}
+
+/* ─── Salvar Configurações de Metas ───────────────────────────── */
+function handleSaveGoalsConfig(e) {
+  e.preventDefault();
+  const retirement = parseFloat(document.getElementById('cfg-retirement-goal')?.value) || 1000000;
+  const passive = parseFloat(document.getElementById('cfg-target-passive')?.value) || 5000;
+  const living = parseFloat(document.getElementById('cfg-cost-of-living')?.value) || 3500;
+  const yieldRate = parseFloat(document.getElementById('cfg-estimated-yield')?.value) || 0.60;
+
+  const g = getGoalsState();
+  g.retirementTarget = retirement;
+  g.targetPassiveIncome = passive;
+  g.costOfLiving = living;
+  g.estimatedMonthlyYield = yieldRate;
+
+  saveEncryptedState();
+  closeModal('modal-goals-config');
+  renderGoalsView();
+  renderHeroGoalsBadge();
+  showToast('Metas de Aposentadoria salvas!', 'success');
+}
+
+/* ─── CRUD de Alvos Personalizados ────────────────────────────── */
+let editingTargetId = null;
+
+function openAddCustomTargetModal(prefill = {}) {
+  editingTargetId = null;
+  document.getElementById('modal-custom-target-title').textContent = '🎯 Novo Alvo Personalizado';
+  document.getElementById('target-id').value = '';
+  document.getElementById('target-title').value = prefill.title || '';
+  document.getElementById('target-category').value = prefill.category || '🛡️';
+  document.getElementById('target-amount').value = prefill.amount || '';
+  document.getElementById('target-saved').value = prefill.saved || '0';
+  document.getElementById('target-deadline').value = prefill.deadline || '';
+  openModal('modal-custom-target');
+}
+
+function openEditCustomTargetModal(id) {
+  const g = getGoalsState();
+  const t = (g.customTargets || []).find(x => x.id === id);
+  if (!t) return;
+
+  editingTargetId = id;
+  document.getElementById('modal-custom-target-title').textContent = '✏️ Editar Alvo';
+  document.getElementById('target-id').value = id;
+  document.getElementById('target-title').value = t.title || '';
+  document.getElementById('target-category').value = t.category || '🎯';
+  document.getElementById('target-amount').value = t.amount || '';
+  document.getElementById('target-saved').value = t.saved || '0';
+  document.getElementById('target-deadline').value = t.deadline || '';
+  openModal('modal-custom-target');
+}
+
+function handleSaveCustomTarget(e) {
+  e.preventDefault();
+  const title = document.getElementById('target-title')?.value.trim();
+  const category = document.getElementById('target-category')?.value || '🎯';
+  const amount = parseFloat(document.getElementById('target-amount')?.value) || 0;
+  const saved = parseFloat(document.getElementById('target-saved')?.value) || 0;
+  const deadline = document.getElementById('target-deadline')?.value || '';
+
+  if (!title || amount <= 0) {
+    showToast('Informe o nome e um valor válido para o alvo.', 'error');
+    return;
+  }
+
+  const g = getGoalsState();
+  if (!Array.isArray(g.customTargets)) g.customTargets = [];
+
+  const item = {
+    id: editingTargetId || ('ct-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)),
+    title,
+    category,
+    amount,
+    saved,
+    deadline
+  };
+
+  if (editingTargetId) {
+    const idx = g.customTargets.findIndex(x => x.id === editingTargetId);
+    if (idx !== -1) g.customTargets[idx] = item;
+  } else {
+    g.customTargets.push(item);
+  }
+
+  saveEncryptedState();
+  closeModal('modal-custom-target');
+  renderGoalsView();
+  showToast(editingTargetId ? 'Alvo atualizado!' : 'Novo alvo criado com sucesso!', 'success');
+}
+
+function deleteCustomTarget(id) {
+  const g = getGoalsState();
+  const item = (g.customTargets || []).find(x => x.id === id);
+  if (!item) return;
+
+  _undoData = { list: 'customTargets', item };
+  g.customTargets = g.customTargets.filter(x => x.id !== id);
+  saveEncryptedState();
+  renderGoalsView();
+
+  showToastWithUndo(`Alvo "${item.title}" removido`, () => {
+    if (_undoData && _undoData.list === 'customTargets') {
+      const g2 = getGoalsState();
+      g2.customTargets.push(_undoData.item);
+      _undoData = null;
+      saveEncryptedState();
+      renderGoalsView();
+      showToast('Alvo restaurado!', 'success');
+    }
+  });
+}
+
 
 function scrollWidget(id, delta) {
   const el = document.getElementById(id);
@@ -3548,6 +4067,8 @@ function renderAll() {
   renderVolumeWidget();
   renderTopValueWidget();
   renderMonthlyGoalProgress();
+  renderHeroGoalsBadge();
+  if (currentTab === 'goals') renderGoalsView();
   if (currentTab === 'explorer') renderExplorerTable();
 }
 

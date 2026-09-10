@@ -149,6 +149,10 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
         Relatórios
       </button>
+      <button class="desktop-nav-item" data-tab="goals">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        Metas &amp; Aposentadoria
+      </button>
       <button class="desktop-nav-item" data-tab="config">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Ajustes
@@ -202,6 +206,21 @@
       </div>
       <!-- Meta de Aporte Mensal (renderizada via JS quando configurada) -->
       <div id="monthly-goal-progress" style="display:none;margin-top:12px;padding-top:10px;border-top:1px solid var(--border-subtle);"></div>
+
+      <!-- Mini Card / Atalho Interativo: Liberdade Financeira & Metas -->
+      <div id="hero-goals-badge" class="hero-goals-badge" onclick="switchTab('goals')" title="Clique para ver sua evolução e metas de aposentadoria">
+        <div class="hgb-left">
+          <div class="hgb-icon">🎯</div>
+          <div>
+            <div class="hgb-title">Liberdade Financeira <span id="hgb-pct" class="hgb-pct">0%</span></div>
+            <div class="hgb-desc" id="hgb-desc">Carregando metas…</div>
+          </div>
+        </div>
+        <div class="hgb-right">
+          <span class="hgb-cta">Ver Metas</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+      </div>
     </section>
 
     <!-- ── BUSCA & FILTROS ── -->
@@ -607,6 +626,162 @@
       </div>
     </section>
 
+    <!-- ══════════════════════════════════════════════════════════
+         VIEW: METAS & APOSENTADORIA (INTERATIVO & INCENTIVADOR)
+         ══════════════════════════════════════════════════════════ -->
+    <section id="view-goals" class="view-section">
+      <div class="goals-header">
+        <div class="goals-header-left">
+          <h2 class="goals-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            Metas de Aposentadoria &amp; Alvos
+          </h2>
+          <span class="badge badge-gold" style="font-size:0.68rem;">Gamificado &amp; Independência Financeira</span>
+        </div>
+        <button class="btn-primary btn-gold" onclick="openModal('modal-goals-config')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Personalizar Alvos
+        </button>
+      </div>
+
+      <!-- Banner Motivacional Dinâmico -->
+      <div class="motivation-banner" id="motivation-banner">
+        <div class="motivation-icon">💡</div>
+        <div class="motivation-content">
+          <div class="motivation-quote" id="motivation-quote">"Cada centavo investido hoje é um soldado trabalhando 24h por dia pela sua liberdade amanhã."</div>
+          <div class="motivation-sub" id="motivation-sub">Efeito Juros Compostos • Consistência &gt; Sorte</div>
+        </div>
+        <button class="btn-icon-subtle" onclick="refreshMotivationQuote()" title="Nova frase inspiradora">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+        </button>
+      </div>
+
+      <!-- Card Principal: Termômetro da Liberdade Financeira -->
+      <div class="freedom-hero-card">
+        <div class="freedom-card-header">
+          <div>
+            <span class="freedom-tag">Índice FIRE • Liberdade Financeira</span>
+            <div class="freedom-main-pct" id="freedom-main-pct">0,0%</div>
+          </div>
+          <div class="freedom-status-badge" id="freedom-status-badge">Nível 1: Construindo a Base</div>
+        </div>
+
+        <!-- Grande Barra de Progresso com Marcadores -->
+        <div class="freedom-bar-wrapper">
+          <div class="freedom-bar-track">
+            <div class="freedom-bar-fill" id="freedom-bar-fill" style="width: 0%;"></div>
+          </div>
+          <div class="freedom-markers">
+            <span>R$ 0</span>
+            <span id="freedom-marker-mid">R$ 500k</span>
+            <span id="freedom-marker-goal" style="color:var(--accent-yellow);font-weight:700;">Meta: R$ 1.000.000</span>
+          </div>
+        </div>
+
+        <!-- Grid de Métricas de Aposentadoria -->
+        <div class="freedom-metrics-grid">
+          <div class="f-metric">
+            <span class="f-metric-label">Patrimônio Atual</span>
+            <span class="f-metric-val" id="f-metric-current">R$ 0,00</span>
+            <span class="f-metric-hint" id="f-metric-missing">Faltam R$ 1.000.000,00</span>
+          </div>
+          <div class="f-metric">
+            <span class="f-metric-label">Renda Passiva Atual Estimada</span>
+            <span class="f-metric-val highlight-green" id="f-metric-passive">R$ 0,00 /mês</span>
+            <span class="f-metric-hint">A ~0,60% a.m. sem tocar no principal</span>
+          </div>
+          <div class="f-metric">
+            <span class="f-metric-label">Meta de Renda na Aposentadoria</span>
+            <span class="f-metric-val highlight-gold" id="f-metric-target-passive">R$ 5.000,00 /mês</span>
+            <span class="f-metric-hint" id="f-metric-passive-pct">0% da renda passiva atingida</span>
+          </div>
+          <div class="f-metric">
+            <span class="f-metric-label">Autonomia / Cobertura</span>
+            <span class="f-metric-val" id="f-metric-coverage">0 meses</span>
+            <span class="f-metric-hint" id="f-metric-coverage-hint">Com base no seu custo de vida</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trilha de Conquistas Gamificada (Os 6 Marcos da Riqueza) -->
+      <div class="goals-section-block">
+        <div class="goals-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+          Trilha da Liberdade Financeira — Conquistas &amp; Fases
+        </div>
+        <div class="milestones-grid" id="milestones-grid">
+          <!-- Renderizado via JS -->
+        </div>
+      </div>
+
+      <!-- Simulador Interativo: A Bola de Neve dos Juros Compostos -->
+      <div class="simulator-card">
+        <div class="sim-header">
+          <div class="sim-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            Simulador Interativo da Bola de Neve
+          </div>
+          <span class="sim-tag">Projeção Dinâmica</span>
+        </div>
+
+        <div class="sim-controls-grid">
+          <div class="sim-control">
+            <label class="sim-label" for="sim-aporte">Quanto você vai aportar por mês? (R$)</label>
+            <div class="sim-input-row">
+              <input type="range" id="sim-aporte-slider" min="100" max="20000" step="100" value="1500" class="sim-slider" oninput="syncSimAporte(this.value)">
+              <input type="number" id="sim-aporte" class="form-input sim-number-input" value="1500" min="0" step="50" oninput="syncSimAporte(this.value)">
+            </div>
+          </div>
+
+          <div class="sim-control">
+            <label class="sim-label" for="sim-rate">Rentabilidade Anual Média Estimada (% a.a.)</label>
+            <div class="sim-input-row">
+              <input type="range" id="sim-rate-slider" min="6" max="20" step="0.5" value="11" class="sim-slider" oninput="syncSimRate(this.value)">
+              <input type="number" id="sim-rate" class="form-input sim-number-input" value="11" min="1" max="50" step="0.5" oninput="syncSimRate(this.value)">
+            </div>
+          </div>
+        </div>
+
+        <!-- Resultados do Simulador -->
+        <div class="sim-result-box" id="sim-result-box">
+          <div class="sim-time-result" id="sim-time-result">
+            Calculando sua rota para a Aposentadoria…
+          </div>
+          <div class="sim-breakdown-bar">
+            <div id="sim-bar-principal" class="sim-bar-segment principal" title="Seus aportes do bolso" style="width: 35%;"></div>
+            <div id="sim-bar-juros" class="sim-bar-segment juros" title="Juros compostos trabalhando por você" style="width: 65%;"></div>
+          </div>
+          <div class="sim-legend-row">
+            <div class="sim-legend-item">
+              <span class="sim-dot principal"></span>
+              <span>Aportes do seu bolso: <strong id="sim-total-investido">R$ 0</strong></span>
+            </div>
+            <div class="sim-legend-item">
+              <span class="sim-dot juros"></span>
+              <span>Juros Compostos (Bola de Neve): <strong id="sim-total-juros" style="color:var(--accent-green);">R$ 0</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alvos & Desejos Personalizados -->
+      <div class="goals-section-block">
+        <div class="goals-section-header">
+          <div class="goals-section-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            Meus Alvos Personalizados (Sonhos &amp; Projetos)
+          </div>
+          <button class="btn-secondary" onclick="openAddCustomTargetModal()" style="font-size:0.75rem;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Novo Alvo
+          </button>
+        </div>
+        <div class="custom-targets-grid" id="custom-targets-grid">
+          <!-- Renderizado via JS -->
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- Bottom Nav (Mobile) -->
@@ -626,6 +801,10 @@
     <button class="nav-item" data-tab="reports">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
       <span>Relatórios</span>
+    </button>
+    <button class="nav-item" data-tab="goals">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      <span>Metas</span>
     </button>
     <button class="nav-item" data-tab="config">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1073,6 +1252,106 @@
       </div>
       <button type="button" class="btn-secondary" onclick="closeAssetDetail()">← Voltar</button>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MODAL: CONFIGURAR METAS DE APOSENTADORIA & ALVOS
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="modal-goals-config" class="modal-overlay">
+  <div class="modal-card" style="max-width:480px;">
+    <div class="modal-header">
+      <h3 class="modal-title">🎯 Personalizar Metas &amp; Aposentadoria</h3>
+      <button class="modal-close-btn" onclick="closeModal('modal-goals-config')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="goals-config-form" onsubmit="handleSaveGoalsConfig(event)">
+      <div class="form-group">
+        <label class="form-label" for="cfg-retirement-goal">Meta de Patrimônio da Aposentadoria (R$)</label>
+        <input type="number" id="cfg-retirement-goal" class="form-input" placeholder="Ex: 1000000" min="1000" step="1000" required>
+        <span style="font-size:0.7rem;color:var(--text-muted);">O montante total que você deseja acumular para ter independência financeira plena.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="cfg-target-passive">Renda Passiva Mensal Almejada (R$ / mês)</label>
+        <input type="number" id="cfg-target-passive" class="form-input" placeholder="Ex: 5000" min="100" step="100" required>
+        <span style="font-size:0.7rem;color:var(--text-muted);">Quanto você quer receber em dividendos e rendimentos todo mês sem trabalhar.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="cfg-cost-of-living">Seu Custo de Vida Mensal Atual (R$)</label>
+        <input type="number" id="cfg-cost-of-living" class="form-input" placeholder="Ex: 3500" min="100" step="50">
+        <span style="font-size:0.7rem;color:var(--text-muted);">Usado para calcular quantos meses ou anos de liberdade seu patrimônio já garante.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="cfg-estimated-yield">Taxa Média Estimada de Dividendos / Rendimento (% a.m.)</label>
+        <input type="number" id="cfg-estimated-yield" class="form-input" placeholder="0.60" min="0.1" max="5.0" step="0.05" value="0.60">
+        <span style="font-size:0.7rem;color:var(--text-muted);">Padrão de mercado saudável para FIIs e Ações Pagadoras: ~0,60% ao mês líquido.</span>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-goals-config')">Cancelar</button>
+        <button type="submit" class="btn-primary btn-gold">Salvar Minhas Metas</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MODAL: ADICIONAR / EDITAR ALVO PERSONALIZADO
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="modal-custom-target" class="modal-overlay">
+  <div class="modal-card" style="max-width:440px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-custom-target-title">🎯 Novo Alvo Personalizado</h3>
+      <button class="modal-close-btn" onclick="closeModal('modal-custom-target')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="custom-target-form" onsubmit="handleSaveCustomTarget(event)">
+      <input type="hidden" id="target-id">
+
+      <div class="form-group">
+        <label class="form-label" for="target-title">Nome do Alvo / Sonho</label>
+        <input type="text" id="target-title" class="form-input" placeholder="Ex: Reserva de Emergência, Viagem dos Sonhos, Carro Novo" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="target-category">Ícone / Categoria</label>
+        <select id="target-category" class="form-select">
+          <option value="🛡️">🛡️ Reserva de Emergência / Segurança</option>
+          <option value="✈️">✈️ Viagem / Férias / Experiência</option>
+          <option value="🚗">🚗 Carro / Transporte</option>
+          <option value="🏠">🏠 Imóvel / Casa Própria / Reforma</option>
+          <option value="🎓">🎓 Estudos / Curso / Especialização</option>
+          <option value="💼">💼 Negócio Próprio / Empreender</option>
+          <option value="🎁">🎁 Conquista Pessoal / Outro</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="target-amount">Valor Alvo (R$)</label>
+        <input type="number" id="target-amount" class="form-input" placeholder="Ex: 30000" min="100" step="100" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="target-saved">Valor Já Guardado / Alocado (R$)</label>
+        <input type="number" id="target-saved" class="form-input" placeholder="0" min="0" step="50" value="0">
+        <span style="font-size:0.7rem;color:var(--text-muted);">Ou deixe em 0 se for usar uma fração do patrimônio geral.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="target-deadline">Prazo Alvo / Data Desejada (Opcional)</label>
+        <input type="date" id="target-deadline" class="form-input">
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-custom-target')">Cancelar</button>
+        <button type="submit" class="btn-primary">Salvar Alvo</button>
+      </div>
+    </form>
   </div>
 </div>
 
