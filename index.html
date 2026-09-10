@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Caderneta de Investimentos</title>
   <meta name="description" content="Controle patrimonial pessoal, carteira e radar de investimentos. PWA offline-first, custo zero.">
   <meta name="theme-color" content="#0d1117">
@@ -158,6 +160,9 @@
         <span class="sync-dot"></span>
         <span id="cloud-sync-text">Nuvem Ativa</span>
       </div>
+      <button id="btn-privacy-toggle" class="btn-icon" onclick="togglePrivacyMode()" title="Ocultar valores">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
       <button id="btn-sync-quotes" class="btn-icon" onclick="refreshAllQuotes()" title="Atualizar cotações">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
       </button>
@@ -195,13 +200,15 @@
         <div id="allocation-bar" class="allocation-bar"></div>
         <div id="allocation-legend" class="alloc-legend"></div>
       </div>
+      <!-- Meta de Aporte Mensal (renderizada via JS quando configurada) -->
+      <div id="monthly-goal-progress" style="display:none;margin-top:12px;padding-top:10px;border-top:1px solid var(--border-subtle);"></div>
     </section>
 
     <!-- ── BUSCA & FILTROS ── -->
     <section id="toolbar-section" class="toolbar-section">
       <div class="search-input-wrapper">
         <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="search-assets" class="search-input" placeholder="Buscar ticker ou nome…">
+        <input type="search" id="search-assets" class="search-input" placeholder="Buscar ticker ou nome… (pressione /)" enterkeyhint="search">
       </div>
       <div class="filter-pills-row">
         <button class="pill-btn active" data-category="ALL">Todos</button>
@@ -487,6 +494,34 @@
 
       <div class="config-group">
         <div class="config-group-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10m0 0 4-4m-4 4-4-4"/><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/></svg>
+          Meta de Aporte Mensal
+        </div>
+        <div class="config-item" style="flex-direction:column;align-items:flex-start;gap:10px;">
+          <div class="config-info">
+            <span class="config-label">Meta mensal (R$)</span>
+            <span class="config-desc">Defina quanto pretende aportar por mês. A barra de progresso aparecerá no Patrimônio.</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="number" id="cfg-monthly-goal" class="form-input"
+              placeholder="Ex: 1500" min="0" step="50"
+              style="width:130px;font-size:0.85rem;"
+              oninput="if(state) state.monthlyGoal=parseFloat(this.value)||0;">
+            <input type="number" id="cfg-monthly-contributed" class="form-input"
+              placeholder="Já aportei: 0" min="0" step="10"
+              style="width:140px;font-size:0.85rem;"
+              oninput="if(state) state.monthlyContributed=parseFloat(this.value)||0;"
+              title="Quanto você já aportou este mês">
+            <button class="btn-secondary" onclick="saveMonthlyGoal()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Salvar Meta
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-group">
+        <div class="config-group-title">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Sistema
         </div>
@@ -538,6 +573,10 @@
             <option value="total">Total Investido ↓</option>
             <option value="rank">Prioridade ↑</option>
           </select>
+          <button class="btn-secondary" onclick="exportPortfolioCSV()" title="Exportar carteira como CSV para Excel" style="white-space:nowrap;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Exportar CSV
+          </button>
         </div>
       </div>
 

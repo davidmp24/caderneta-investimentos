@@ -11,7 +11,7 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION        = '1.5.0';
+const APP_VERSION        = '1.6.5';
 const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
 const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
 const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
@@ -716,13 +716,140 @@ function showLoginError(msg) {
   setTimeout(() => el.classList.remove('show'), 4000);
 }
 
+/* ─── Modo Privacidade ─────────────────────────────────────── */
+let privacyMode = false;
+
+function togglePrivacyMode() {
+  privacyMode = !privacyMode;
+  document.body.classList.toggle('privacy-mode', privacyMode);
+  const btn = document.getElementById('btn-privacy-toggle');
+  if (btn) {
+    btn.title = privacyMode ? 'Exibir valores' : 'Ocultar valores';
+    btn.innerHTML = privacyMode
+      ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+      : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+  }
+  renderSummary();
+}
+
+function fmtPrivate(val) {
+  if (privacyMode) return 'R$ ••••••';
+  return fmt(val);
+}
+
+function fmtNPrivate(val) {
+  if (privacyMode) return '••••';
+  return fmtN(val);
+}
+
+/* ─── Exportar CSV ────────────────────────────────────────── */
+function exportPortfolioCSV() {
+  const header = ['Ticker','Nome','Tipo','Quantidade','Preço Médio','Preço Atual','Total Investido','Valor Atual','P&L R$','P&L %','Notas'];
+  const rows = [header];
+
+  state.portfolio.forEach(a => {
+    const qty = parseFloat(a.quantity) || 0;
+    const avg = parseFloat(a.avgPrice) || 0;
+    const quote = getStockQuoteData(a.ticker);
+    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
+    const inv = qty * avg;
+    const atl = qty * cur;
+    const pnl = atl - inv;
+    const pct = inv > 0 ? (pnl / inv) * 100 : 0;
+    rows.push([
+      a.ticker, a.name || '', a.type,
+      qty.toString().replace('.', ','),
+      avg.toFixed(2).replace('.', ','),
+      cur.toFixed(2).replace('.', ','),
+      inv.toFixed(2).replace('.', ','),
+      atl.toFixed(2).replace('.', ','),
+      pnl.toFixed(2).replace('.', ','),
+      pct.toFixed(2).replace('.', ',') + '%',
+      (a.notes || '').replace(/;/g, ' '),
+    ]);
+  });
+
+  // Separador ponto e vírgula para compatibilidade com Excel brasileiro
+  const csvContent = rows.map(r => r.map(v => `"${v}"`).join(';')).join('\n');
+  const bom = '\uFEFF'; // BOM para UTF-8 no Excel
+  const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `caderneta-carteira-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV da carteira exportado!', 'success');
+}
+
+/* ─── Undo Delete ─────────────────────────────────────────── */
+let _undoData = null;
+let _undoTimer = null;
+
+function showToastWithUndo(msg, onUndo) {
+  // Limpar toast anterior se ainda estiver visível
+  if (_undoTimer) clearTimeout(_undoTimer);
+
+  const container = document.getElementById('toast-container');
+  const existing = document.getElementById('toast-undo');
+  if (existing) existing.remove();
+
+  const el = document.createElement('div');
+  el.className = 'toast info';
+  el.id = 'toast-undo';
+  el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:260px;';
+  el.innerHTML = `<span>${escapeHtml(msg)}</span>
+    <button onclick="(${onUndo.toString()})()" style="background:rgba(88,166,255,.2);border:1px solid rgba(88,166,255,.4);color:var(--accent-blue);padding:3px 10px;border-radius:4px;font-size:0.75rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+      Desfazer
+    </button>`;
+  container.appendChild(el);
+
+  _undoTimer = setTimeout(() => {
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 300);
+    _undoData = null;
+  }, 5000);
+}
+
+function deleteAssetWithUndo(id) {
+  const item = state.portfolio.find(a => a.id === id);
+  if (!item) return;
+  _undoData = { list: 'portfolio', item };
+  state.portfolio = state.portfolio.filter(a => a.id !== id);
+  saveEncryptedState(); renderAll();
+  showToastWithUndo(`${item.ticker} removido da carteira`, () => {
+    if (_undoData && _undoData.list === 'portfolio') {
+      state.portfolio.push(_undoData.item);
+      _undoData = null;
+      saveEncryptedState(); renderAll();
+      showToast('Remoção desfeita.', 'success');
+    }
+  });
+}
+
+function deleteWatchlistItemWithUndo(id) {
+  const item = state.watchlist.find(a => a.id === id);
+  if (!item) return;
+  _undoData = { list: 'watchlist', item };
+  state.watchlist = state.watchlist.filter(a => a.id !== id);
+  saveEncryptedState(); renderAll();
+  showToastWithUndo(`${item.ticker} removido do Radar`, () => {
+    if (_undoData && _undoData.list === 'watchlist') {
+      state.watchlist.push(_undoData.item);
+      _undoData = null;
+      saveEncryptedState(); renderAll();
+      showToast('Remoção desfeita.', 'success');
+    }
+  });
+}
+
 function openApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').style.display = 'flex';
   document.getElementById('app').style.flexDirection = 'column';
   startSessionTimer();
   renderAll();
-  renderBestWidget();
   renderFavoritosWidget();
   renderVolumeWidget();
   renderTopValueWidget();
@@ -732,7 +859,7 @@ function openApp() {
   enableScrollDrag('topvalue-scroll');
   initExplorer();
   refreshAllQuotes();
-  refreshBestQuotes();
+  refreshBestQuotes(); // renderBestWidget chamado dentro após fetch
   SyncService.updateUi();
   SyncService.checkBackgroundSync();
 }
@@ -862,8 +989,8 @@ function isB3MarketOpen() {
     }
 
     const minutes = spDate.getHours() * 60 + spDate.getMinutes();
-    // Sessão regular B3: 10h00 (600m) às 17h55 (1075m)
-    return minutes >= 600 && minutes <= 1075;
+    // Sessão regular B3: 10h00 (600m) às 17h30 (1050m)
+    return minutes >= 600 && minutes <= 1050;
   } catch {
     return false;
   }
@@ -874,12 +1001,16 @@ function getStockQuoteData(ticker) {
   const clean = (ticker || '').toUpperCase().trim();
   const marketOpen = isB3MarketOpen();
 
-  // 1. Cache do QuoteService ou Best
-  const cached = bestPrices[clean] || QuoteService.cache[clean] || explorerPrices[clean];
+  // 1. Cache do QuoteService (fonte primária) ou Best
+  const qCache = QuoteService.cache[clean];
+  const bCache = bestPrices[clean];
+  // explorerPrices só é usado se tiver .price numérico (estrutura confirmada)
+  const eCache = (explorerPrices[clean] && typeof explorerPrices[clean].price === 'number') ? explorerPrices[clean] : null;
+  const cached = bCache || qCache || eCache;
   if (cached && cached.price != null) {
     return {
       price: cached.price,
-      change: cached.change ?? 0,
+      change: cached.change ?? cached.changePercent ?? 0,
       name: cached.name || clean,
       isClosed: !marketOpen || Boolean(cached.isClosed),
     };
@@ -1085,10 +1216,10 @@ const QuoteService = {
 
   isCryptoSymbol(ticker) {
     const clean = (ticker || '').toUpperCase().trim();
+    // Parênteses obrigatórios: && tem precedência maior que ||
     return KNOWN_CRYPTO_LIST.includes(clean) ||
            clean.endsWith('USDT') ||
-           clean.endsWith('BTC') ||
-           clean.endsWith('BRL') && !clean.match(/^\w{4}\d{1,2}/);
+           (clean.endsWith('BRL') && !clean.match(/^\w{4}\d{1,2}/));
   },
 
   async getQuotes(tickers) {
@@ -1107,9 +1238,17 @@ const QuoteService = {
         cryptoTickers.length ? this.fetchBinance(cryptoTickers) : {},
       ]);
 
+      // Captura o timestamp APÓS o await para TTL preciso
+      const fetchedAt = Date.now();
       const allData = { ...yahooData, ...binanceData };
       for (const [ticker, data] of Object.entries(allData)) {
-        this.cache[ticker] = { ...data, ts: now };
+        this.cache[ticker] = { ...data, ts: fetchedAt };
+      }
+
+      // Limpeza de entradas de cache mais antigas que 30 minutos (evita memory leak)
+      const MAX_CACHE_AGE = 30 * 60 * 1000;
+      for (const k of Object.keys(this.cache)) {
+        if (fetchedAt - this.cache[k].ts > MAX_CACHE_AGE) delete this.cache[k];
       }
     }
 
@@ -1294,7 +1433,8 @@ function renderReports() {
 // Auxiliar de formatação monetária
 function fmtCurrency(v) {
   if (v == null || isNaN(v)) return '—';
-  return 'R$ ' + Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const abs = Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (v < 0 ? '−' : '') + 'R$ ' + abs;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1318,9 +1458,9 @@ function renderSummary() {
   const lucro = totalAtual - totalInvestido;
   const pct   = totalInvestido > 0 ? (lucro / totalInvestido) * 100 : 0;
 
-  document.getElementById('total-patrimonio').textContent  = fmt(totalAtual);
-  document.getElementById('total-investido').textContent   = fmt(totalInvestido);
-  document.getElementById('total-lucro-nominal').textContent = (lucro >= 0 ? '+' : '') + fmt(lucro);
+  document.getElementById('total-patrimonio').textContent  = fmtPrivate(totalAtual);
+  document.getElementById('total-investido').textContent   = fmtPrivate(totalInvestido);
+  document.getElementById('total-lucro-nominal').textContent = privacyMode ? 'R$ ••••••' : (lucro >= 0 ? '+' : '') + fmt(lucro);
 
   const badge = document.getElementById('badge-rentabilidade-total');
   badge.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
@@ -2878,10 +3018,7 @@ document.getElementById('asset-form').addEventListener('submit', async function(
 });
 
 function deleteAsset(id) {
-  if (!confirm('Remover este ativo da carteira?')) return;
-  state.portfolio = state.portfolio.filter(x => x.id !== id);
-  saveEncryptedState(); renderAll();
-  showToast('Ativo removido.', 'info');
+  deleteAssetWithUndo(id);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2953,10 +3090,7 @@ document.getElementById('watchlist-form').addEventListener('submit', async funct
 });
 
 function deleteWatchlistItem(id) {
-  if (!confirm('Remover do Radar?')) return;
-  state.watchlist = state.watchlist.filter(x => x.id !== id);
-  saveEncryptedState(); renderAll();
-  showToast('Removido do Radar.', 'info');
+  deleteWatchlistItemWithUndo(id);
 }
 
 /* Mover do Radar para Carteira */
@@ -3341,6 +3475,62 @@ async function saveCustomCloudConfig() {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   ATALHO DE TECLADO — / ou Ctrl+K para busca
+   ═══════════════════════════════════════════════════════════ */
+document.addEventListener('keydown', e => {
+  const tag = (document.activeElement || {}).tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if ((e.key === '/' ) || (e.ctrlKey && e.key === 'k')) {
+    e.preventDefault();
+    const searchEl = document.getElementById('search-assets');
+    if (searchEl) {
+      // Navegar para a aba carteira se não estiver nela
+      if (currentTab !== 'carteira' && currentTab !== 'radar') switchTab('carteira');
+      searchEl.focus();
+      searchEl.select();
+    }
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════
+   META DE APORTE MENSAL
+   ═══════════════════════════════════════════════════════════ */
+function saveMonthlyGoal() {
+  const input = document.getElementById('cfg-monthly-goal');
+  if (!input) return;
+  const val = parseFloat(input.value.replace(',', '.')) || 0;
+  state.monthlyGoal = val;
+  saveEncryptedState();
+  renderSummary();
+  showToast('Meta de aporte salva!', 'success');
+}
+
+function renderMonthlyGoalProgress() {
+  const el = document.getElementById('monthly-goal-progress');
+  if (!el || !state.monthlyGoal) { if (el) el.style.display = 'none'; return; }
+
+  // Calcular total investido no mês atual (baseado nos aportes — aproximado pelo total investido)
+  const goal = parseFloat(state.monthlyGoal) || 0;
+  if (!goal) { el.style.display = 'none'; return; }
+
+  // Como não temos histórico de datas de aporte, usamos um valor fixo de progresso do mês
+  // (o usuário pode ajustar manualmente via campo)
+  const contributed = parseFloat(state.monthlyContributed || 0);
+  const pct = Math.min((contributed / goal) * 100, 100);
+
+  el.style.display = '';
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+      <span style="font-size:0.7rem;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">Meta Aporte Mensal</span>
+      <span style="font-size:0.72rem;color:var(--text-muted);">${privacyMode ? '••••' : fmtN(contributed)} / ${privacyMode ? '••••' : fmtN(goal)}</span>
+    </div>
+    <div style="height:5px;background:var(--bg-surface);border-radius:var(--radius-full);overflow:hidden;">
+      <div style="height:100%;width:${pct}%;background:${pct >= 100 ? 'var(--accent-green)' : 'var(--accent-blue)'};border-radius:var(--radius-full);transition:width .4s ease;"></div>
+    </div>
+    <div style="font-size:0.65rem;color:var(--text-muted);margin-top:3px;text-align:right;">${pct.toFixed(0)}% da meta atingida</div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
    RENDER PRINCIPAL
    ═══════════════════════════════════════════════════════════ */
 
@@ -3357,6 +3547,7 @@ function renderAll() {
   renderFavoritosWidget();
   renderVolumeWidget();
   renderTopValueWidget();
+  renderMonthlyGoalProgress();
   if (currentTab === 'explorer') renderExplorerTable();
 }
 

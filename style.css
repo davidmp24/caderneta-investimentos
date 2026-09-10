@@ -78,7 +78,7 @@ body {
   flex-direction: column;
   align-items: center;
   overflow-x: hidden;
-  padding-bottom: 84px;
+  padding-bottom: max(84px, calc(70px + env(safe-area-inset-bottom)));
   /* Subtle grid texture */
   background-image:
     radial-gradient(ellipse 80% 50% at 50% -10%, rgba(88,166,255,0.06) 0%, transparent 70%),
@@ -1097,7 +1097,7 @@ main {
   border-top: 1px solid var(--border-card);
   display: flex;
   justify-content: space-around;
-  padding: 8px 8px 14px;
+  padding: 8px 8px max(14px, env(safe-area-inset-bottom));
   z-index: 50;
 }
 
@@ -2501,4 +2501,138 @@ main {
   .reports-header { flex-direction: column; align-items: flex-start; }
   .reports-filters { width: 100%; }
   .reports-filters .form-select { flex: 1; }
+}
+
+/* ==========================================================================
+   REDESIGN PROFISSIONAL v2 — Fase 3
+   ========================================================================== */
+
+/* ── Gradient fade lateral nos widgets de scroll ────────────── */
+.widget-section {
+  position: relative;
+}
+
+.widget-section::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 28px; /* abaixo do header do widget */
+  bottom: 0;
+  width: 44px;
+  background: linear-gradient(to left, var(--bg-primary) 0%, transparent 100%);
+  pointer-events: none;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  z-index: 2;
+}
+
+/* ── Flash de preço ao atualizar ──────────────────────────────── */
+@keyframes priceFlash {
+  0%   { color: var(--accent-green); text-shadow: 0 0 8px rgba(63, 185, 80, 0.5); }
+  60%  { color: var(--accent-green); }
+  100% { color: var(--text-primary); text-shadow: none; }
+}
+
+@keyframes priceFlashNeg {
+  0%   { color: var(--accent-red); text-shadow: 0 0 8px rgba(248, 81, 73, 0.5); }
+  60%  { color: var(--accent-red); }
+  100% { color: var(--text-primary); text-shadow: none; }
+}
+
+.price-updated-up   { animation: priceFlash    0.9s ease forwards; }
+.price-updated-down { animation: priceFlashNeg 0.9s ease forwards; }
+
+/* ── Skeleton Loaders ─────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 25%,
+    var(--bg-card-hover) 50%,
+    var(--bg-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+  color: transparent !important;
+}
+
+.skeleton-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: var(--radius-xs);
+}
+
+/* ── Grid cards — 2 colunas em mobile < 480px ─────────────────── */
+@media (max-width: 480px) {
+  .asset-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── Modo Privacidade ─────────────────────────────────────────── */
+body.privacy-mode .patrimonio-value,
+body.privacy-mode .metric-subvalue,
+body.privacy-mode .badge-profit {
+  filter: blur(6px);
+  user-select: none;
+  transition: filter 0.25s ease;
+}
+
+body.privacy-mode .patrimonio-value:hover,
+body.privacy-mode .metric-subvalue:hover,
+body.privacy-mode .badge-profit:hover {
+  filter: blur(0);
+}
+
+/* ── Hero card — patrimônio maior ────────────────────────────── */
+.patrimonio-value {
+  font-size: clamp(1.7rem, 5vw, 2.2rem);
+}
+
+/* ── Card hover shadow ────────────────────────────────────────── */
+.asset-card:hover {
+  box-shadow: 0 4px 20px rgba(1, 4, 9, 0.5);
+  transform: translateY(-1px);
+}
+
+.asset-card { transition: border-color var(--ease-fast), background var(--ease-fast), box-shadow var(--ease-normal), transform var(--ease-normal); }
+
+/* ── Fav card hover ────────────────────────────────────────────── */
+.fav-card:hover {
+  box-shadow: 0 4px 16px rgba(1, 4, 9, 0.4);
+  transform: translateY(-1px);
+}
+
+.fav-card { transition: border-color var(--ease-fast), background var(--ease-fast), box-shadow var(--ease-normal), transform var(--ease-normal); }
+
+/* ── Btn-privacy active state ──────────────────────────────────── */
+body.privacy-mode #btn-privacy-toggle {
+  color: var(--accent-blue);
+  background: var(--accent-blue-dim);
+  border-color: rgba(88, 166, 255, 0.4);
+}
+
+/* ── Desktop nav at >= 640px ──────────────────────────────────── */
+@media (min-width: 640px) {
+  .desktop-nav { display: flex; }
+  .bottom-nav  { display: none; }
+}
+
+/* ── Hero card top border gradient ──────────────────────────────── */
+.summary-hero-card::before {
+  background: linear-gradient(90deg, var(--accent-blue) 0%, var(--accent-green) 50%, var(--accent-purple) 100%);
+  height: 3px;
 }
