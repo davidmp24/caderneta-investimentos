@@ -988,63 +988,92 @@ const QuoteService = {
     if (!symbols || !symbols.length) return {};
     const result = {};
 
-    // 1. Obter cotação do dólar cripto (USDTBRL) para conversão se necessário
-    let usdtBrlRate = 5.85;
-    try {
-      const usdtRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL', { signal: AbortSignal.timeout(3500) });
-      if (usdtRes.ok) {
-        const d = await usdtRes.json();
-        if (d?.price) usdtBrlRate = parseFloat(d.price);
-      }
-    } catch { /* usa taxa padrão */ }
+    // Cache da taxa USDT→BRL por 10 minutos para evitar requisições extras
+    const now = Date.now();
+    if (!this._usdtBrlTs || (now - this._usdtBrlTs) > 600000) {
+      try {
+        const r = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL',
+          { signal: AbortSignal.timeout(3500) });
+        if (r.ok) {
+          const d = await r.json();
+          if (d?.price) { this._usdtBrl = parseFloat(d.price); this._usdtBrlTs = now; }
+        }
+      } catch { /* usa taxa padrão */ }
+    }
+    const usdtBrlRate = this._usdtBrl || 5.85;
 
-    // 2. Mapear pares a buscar
-    const pairsToFetch = [];
-    const symbolMap = {}; // PairName -> originalSymbol
+    // Montar pares: preferir BRL direto; se não existir, usar USDT e converter
+    const brlPairs = [];
+    const usdtPairs = [];
+    const symbolOfBrl  = {}; // "BTCBRL"  -> "BTC"
+    const symbolOfUsdt = {}; // "BTCUSDT" -> "BTC"
 
     for (const raw of symbols) {
-      const clean = raw.toUpperCase().trim();
-      const base = clean.replace(/USDT$|BRL$|BTC$/, '');
-
-      // Tentar par direto em BRL primeiro
-      const brlPair = `${base || clean}BRL`;
-      const usdtPair = `${base || clean}USDT`;
-
-      pairsToFetch.push(brlPair, usdtPair);
-      symbolMap[brlPair] = clean;
-      symbolMap[usdtPair] = clean;
+      const clean = raw.toUpperCase().trim().replace(/USDT$|BRL$|BTC$/, '');
+      const sym = clean || raw.toUpperCase().trim();
+      brlPairs.push(`${sym}BRL`);
+      usdtPairs.push(`${sym}USDT`);
+      symbolOfBrl[`${sym}BRL`]  = raw.toUpperCase().trim();
+      symbolOfUsdt[`${sym}USDT`] = raw.toUpperCase().trim();
     }
 
     try {
-      const uniquePairs = [...new Set(pairsToFetch)];
-      const qs = encodeURIComponent(JSON.stringify(uniquePairs));
+      // Uma única requisição batch com todos os pares BRL
+      const qs = encodeURIComponent(JSON.stringify([...new Set(brlPairs)]));
       const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${qs}`,
-        { signal: AbortSignal.timeout(5500) });
+        { signal: AbortSignal.timeout(5000) });
 
+      const foundSymbols = new Set();
       if (res.ok) {
         const data = await res.json();
-        for (const t of data) {
-          const original = symbolMap[t.symbol];
-          if (!original) continue;
-
-          let price = parseFloat(t.lastPrice);
-          const change = parseFloat(t.priceChangePercent);
-
-          // Se for par USDT, converter para BRL para manter consistência com a carteira
-          if (t.symbol.endsWith('USDT') && !original.endsWith('USDT')) {
-            price = price * usdtBrlRate;
-          }
-
-          // Se já temos a cotação em BRL nativa, preferir BRL
-          if (t.symbol.endsWith('BRL') || !result[original]) {
+        if (Array.isArray(data)) {
+          for (const t of data) {
+            const original = symbolOfBrl[t.symbol];
+            if (!original) continue;
+            const price = parseFloat(t.lastPrice);
+            if (!price) continue;
             result[original] = {
               price,
-              change,
+              change: parseFloat(t.priceChangePercent),
+              changePercent: parseFloat(t.priceChangePercent),
               name: `${original} (Binance)`,
               isClosed: false,
             };
+            foundSymbols.add(original);
           }
         }
+      }
+
+      // Para símbolos sem par BRL, tentar USDT e converter
+      const missingSymbols = symbols.filter(s => !foundSymbols.has(s.toUpperCase().trim()));
+      if (missingSymbols.length > 0) {
+        const missingPairs = missingSymbols.map(s => {
+          const clean = s.toUpperCase().trim().replace(/USDT$|BRL$|BTC$/, '') || s.toUpperCase().trim();
+          return `${clean}USDT`;
+        });
+        try {
+          const qs2 = encodeURIComponent(JSON.stringify([...new Set(missingPairs)]));
+          const res2 = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${qs2}`,
+            { signal: AbortSignal.timeout(4000) });
+          if (res2.ok) {
+            const data2 = await res2.json();
+            if (Array.isArray(data2)) {
+              for (const t of data2) {
+                const original = symbolOfUsdt[t.symbol];
+                if (!original || result[original]) continue;
+                const price = parseFloat(t.lastPrice) * usdtBrlRate;
+                if (!price) continue;
+                result[original] = {
+                  price,
+                  change: parseFloat(t.priceChangePercent),
+                  changePercent: parseFloat(t.priceChangePercent),
+                  name: `${original} (Binance)`,
+                  isClosed: false,
+                };
+              }
+            }
+          }
+        } catch { /* ignora pares USDT não encontrados */ }
       }
     } catch (e) {
       console.warn('Erro ao consultar Binance API:', e);
@@ -1052,6 +1081,7 @@ const QuoteService = {
 
     return result;
   },
+
 
   isCryptoSymbol(ticker) {
     const clean = (ticker || '').toUpperCase().trim();
@@ -1719,15 +1749,26 @@ function _renderMarketWidget(containerId, tickerList, accentColor) {
 
   enableScrollDrag(containerId);
 
+  // Buscar cotações e atualizar os preços in-place (sem re-renderizar para evitar loop infinito)
   QuoteService.getQuotes(tickers).then(quotes => {
-    let updated = false;
     tickers.forEach(t => {
-      if (quotes[t]?.price) { bestPrices[t] = quotes[t]; updated = true; }
+      const q = quotes[t];
+      if (!q?.price) return;
+      bestPrices[t] = q;
+
+      // Atualizar preço no card existente sem re-renderizar
+      const card = container.querySelector(`.best-card[onclick*="'${t}'"]`);
+      if (!card) return;
+      const priceEl = card.querySelector('.best-price');
+      if (priceEl) priceEl.textContent = fmtN(q.price);
+
+      const chg = q.changePercent ?? q.change ?? null;
+      const chgEl = card.querySelector('.best-change');
+      if (chgEl && chg != null) {
+        chgEl.className = `best-change ${chg >= 0 ? 'pos' : 'neg'}`;
+        chgEl.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
+      }
     });
-    if (updated && container) {
-      // Re-renderizar suavemente apenas se o container ainda estiver visível
-      _renderMarketWidget(containerId, tickers, accentColor);
-    }
   });
 }
 

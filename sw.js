@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caderneta-v1.6.3';
+const CACHE_NAME = 'caderneta-v1.6.4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
