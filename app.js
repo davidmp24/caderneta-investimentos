@@ -65,22 +65,60 @@ let bestEditList    = [];
 let bestPrices      = {};
 
 /* ─── Helper de Logos dos Ativos ──────────────────────────── */
+const KNOWN_CRYPTO_LIST = ['BTC','ETH','SOL','BNB','XRP','DOGE','ADA','AVAX','LINK','SUI','DOT','NEAR','LTC','SHIB','PEPE','UNI','RENDER','ATOM','ICP','APT','FIL','TRX','XLM','ARB','OP','POL','FET','TIA','RUNE','INJ','AAVE','KAS','USDT','USDC'];
+
 function getAssetLogoUrl(ticker) {
   if (!ticker) return '';
   const clean = ticker.toUpperCase().trim();
+  const rawClean = clean.replace(/USDT$|BRL$|BTC$/, '');
+
+  // Se for Cripto: busca do repositório CoinCap ou CryptoLogos
+  if (KNOWN_CRYPTO_LIST.includes(clean) || KNOWN_CRYPTO_LIST.includes(rawClean) || clean.endsWith('USDT')) {
+    const symbol = (rawClean || clean).toLowerCase();
+    return `https://assets.coincap.io/assets/icons/${symbol}@2x.png`;
+  }
+
+  // Se for B3: busca do repositório oficial de ícones B3
   return `https://raw.githubusercontent.com/thefintz/icones-b3/main/icones/${clean}.png`;
+}
+
+function getTickerColorGradient(ticker) {
+  const gradients = [
+    'linear-gradient(135deg, #2563eb, #1d4ed8)',
+    'linear-gradient(135deg, #059669, #047857)',
+    'linear-gradient(135deg, #d97706, #b45309)',
+    'linear-gradient(135deg, #7c3aed, #6d28d9)',
+    'linear-gradient(135deg, #dc2626, #b91c1c)',
+    'linear-gradient(135deg, #0891b2, #0e7490)',
+    'linear-gradient(135deg, #4f46e5, #4338ca)',
+  ];
+  let hash = 0;
+  for (let i = 0; i < ticker.length; i++) hash += ticker.charCodeAt(i);
+  return gradients[Math.abs(hash) % gradients.length];
 }
 
 function renderAssetLogoHtml(ticker, cssClass = 'asset-logo') {
   const clean = (ticker || '').toUpperCase().trim();
-  const initials = clean.replace(/[^A-Z]/g, '').slice(0, 4) || clean.slice(0, 4);
+  const initials = clean.replace(/[^A-Z0-9]/g, '').slice(0, 4) || clean.slice(0, 4);
   const url = getAssetLogoUrl(clean);
   const fbClass = cssClass === 'explorer-logo' ? 'explorer-logo-fb' : cssClass === 'fav-logo' ? 'fav-logo-fb' : 'asset-logo-fallback';
+  const baseTicker = clean.replace(/\d+$/, '');
+  const bgGradient = getTickerColorGradient(clean);
+
   return `
-    <div class="${cssClass}" title="${clean}">
+    <div class="${cssClass}" title="${clean}" style="background:transparent;">
       <img src="${url}" alt="${clean}" loading="lazy"
-           onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
-      <span class="${fbClass}" style="display:none;">${initials}</span>
+           onerror="
+             const fallbackUrl = 'https://raw.githubusercontent.com/thefintz/icones-b3/main/icones/${baseTicker}.png';
+             if (this.src !== fallbackUrl && !this.dataset.tried) {
+               this.dataset.tried = '1';
+               this.src = fallbackUrl;
+             } else {
+               this.style.display = 'none';
+               if (this.nextElementSibling) this.nextElementSibling.style.display = 'flex';
+             }
+           " />
+      <span class="${fbClass}" style="display:none;background:${bgGradient};color:#fff;font-weight:700;border-radius:inherit;width:100%;height:100%;align-items:center;justify-content:center;letter-spacing:-0.03em;">${initials}</span>
     </div>
   `;
 }
@@ -947,28 +985,80 @@ const QuoteService = {
   },
 
   async fetchBinance(symbols) {
+    if (!symbols || !symbols.length) return {};
     const result = {};
-    const btcPairs = symbols.filter(s => s.endsWith('BTC'));
-    const usdtPairs = symbols.filter(s => s.endsWith('USDT'));
 
-    const allPairs = [...btcPairs, ...usdtPairs];
-    if (!allPairs.length) return result;
+    // 1. Obter cotação do dólar cripto (USDTBRL) para conversão se necessário
+    let usdtBrlRate = 5.85;
+    try {
+      const usdtRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL', { signal: AbortSignal.timeout(3500) });
+      if (usdtRes.ok) {
+        const d = await usdtRes.json();
+        if (d?.price) usdtBrlRate = parseFloat(d.price);
+      }
+    } catch { /* usa taxa padrão */ }
+
+    // 2. Mapear pares a buscar
+    const pairsToFetch = [];
+    const symbolMap = {}; // PairName -> originalSymbol
+
+    for (const raw of symbols) {
+      const clean = raw.toUpperCase().trim();
+      const base = clean.replace(/USDT$|BRL$|BTC$/, '');
+
+      // Tentar par direto em BRL primeiro
+      const brlPair = `${base || clean}BRL`;
+      const usdtPair = `${base || clean}USDT`;
+
+      pairsToFetch.push(brlPair, usdtPair);
+      symbolMap[brlPair] = clean;
+      symbolMap[usdtPair] = clean;
+    }
 
     try {
-      const qs = encodeURIComponent(JSON.stringify(allPairs));
+      const uniquePairs = [...new Set(pairsToFetch)];
+      const qs = encodeURIComponent(JSON.stringify(uniquePairs));
       const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${qs}`,
-        { signal: AbortSignal.timeout(5000) });
-      if (!res.ok) return result;
-      const data = await res.json();
-      for (const t of data) {
-        result[t.symbol] = {
-          price:  parseFloat(t.lastPrice),
-          change: parseFloat(t.priceChangePercent),
-          name:   t.symbol,
-        };
+        { signal: AbortSignal.timeout(5500) });
+
+      if (res.ok) {
+        const data = await res.json();
+        for (const t of data) {
+          const original = symbolMap[t.symbol];
+          if (!original) continue;
+
+          let price = parseFloat(t.lastPrice);
+          const change = parseFloat(t.priceChangePercent);
+
+          // Se for par USDT, converter para BRL para manter consistência com a carteira
+          if (t.symbol.endsWith('USDT') && !original.endsWith('USDT')) {
+            price = price * usdtBrlRate;
+          }
+
+          // Se já temos a cotação em BRL nativa, preferir BRL
+          if (t.symbol.endsWith('BRL') || !result[original]) {
+            result[original] = {
+              price,
+              change,
+              name: `${original} (Binance)`,
+              isClosed: false,
+            };
+          }
+        }
       }
-    } catch { /* noop */ }
+    } catch (e) {
+      console.warn('Erro ao consultar Binance API:', e);
+    }
+
     return result;
+  },
+
+  isCryptoSymbol(ticker) {
+    const clean = (ticker || '').toUpperCase().trim();
+    return KNOWN_CRYPTO_LIST.includes(clean) ||
+           clean.endsWith('USDT') ||
+           clean.endsWith('BTC') ||
+           clean.endsWith('BRL') && !clean.match(/^\w{4}\d{1,2}/);
   },
 
   async getQuotes(tickers) {
@@ -979,8 +1069,8 @@ const QuoteService = {
     });
 
     if (toFetch.length > 0) {
-      const cryptoTickers = toFetch.filter(t => t.endsWith('USDT') || t.endsWith('BTC'));
-      const b3Tickers     = toFetch.filter(t => !t.endsWith('USDT') && !t.endsWith('BTC'));
+      const cryptoTickers = toFetch.filter(t => this.isCryptoSymbol(t));
+      const b3Tickers     = toFetch.filter(t => !this.isCryptoSymbol(t));
 
       const [yahooData, binanceData] = await Promise.all([
         b3Tickers.length     ? this.fetchYahoo(b3Tickers)      : {},
@@ -2212,45 +2302,60 @@ function renderTradingViewChart(ticker, type) {
   if (!container) return;
   container.innerHTML = '';
 
-  let tvSymbol = `BMFBOVESPA:${ticker}`;
-  if (ticker === 'TRPL4') tvSymbol = 'BMFBOVESPA:ISAE4';
-  if (ticker.endsWith('USDT') || ticker.endsWith('BTC')) tvSymbol = `BINANCE:${ticker}`;
+  const clean = (ticker || '').toUpperCase().trim();
+  const rawBase = clean.replace(/USDT$|BRL$|BTC$/, '');
+  const isCrypto = type === 'CRYPTO' ||
+                   KNOWN_CRYPTO_LIST.includes(clean) ||
+                   KNOWN_CRYPTO_LIST.includes(rawBase) ||
+                   clean.endsWith('USDT') ||
+                   clean.endsWith('BTC');
 
-  const widgetId = `tv_chart_${Math.random().toString(36).slice(2, 9)}`;
-  container.innerHTML = `<div id="${widgetId}" style="width:100%;height:100%;"></div>`;
-
-  if (typeof TradingView !== 'undefined' && TradingView.widget) {
-    try {
-      new TradingView.widget({
-        autosize: true,
-        symbol: tvSymbol,
-        interval: 'D',
-        timezone: 'America/Sao_Paulo',
-        theme: 'dark',
-        style: '1',
-        locale: 'br',
-        toolbar_bg: '#161b22',
-        enable_publishing: false,
-        allow_symbol_change: false,
-        container_id: widgetId,
-        hide_side_toolbar: false,
-        studies: ['RSI@tv-basicstudies', 'MASimple@tv-basicstudies'],
-      });
-      return;
-    } catch (e) {
-      console.warn('Erro ao instanciar TradingView.widget:', e);
-    }
+  let tvSymbol = `BMFBOVESPA:${clean}`;
+  if (clean === 'TRPL4') tvSymbol = 'BMFBOVESPA:ISAE4';
+  if (isCrypto) {
+    tvSymbol = `BINANCE:${rawBase || clean}USDT`;
   }
 
-  // Fallback para iframe oficial TradingView
-  container.innerHTML = `
-    <iframe
-      src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${encodeURIComponent(tvSymbol)}&interval=D&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=161b22&studies=%5B%5D&theme=dark&style=1&timezone=America%2FSao_Paulo&locale=br"
-      style="width:100%;height:100%;border:none;border-radius:8px;"
-      allowtransparency="true"
-      scrolling="no">
-    </iframe>
-  `;
+  const widgetId = `tv_chart_${Date.now()}`;
+  container.innerHTML = `<div id="${widgetId}" style="width:100%;height:100%;min-height:380px;"></div>`;
+
+  const instantiateWidget = () => {
+    if (typeof TradingView !== 'undefined' && TradingView.widget) {
+      try {
+        new TradingView.widget({
+          autosize: true,
+          symbol: tvSymbol,
+          interval: 'D',
+          timezone: 'America/Sao_Paulo',
+          theme: 'dark',
+          style: '1',
+          locale: 'br',
+          toolbar_bg: '#161b22',
+          enable_publishing: false,
+          allow_symbol_change: true,
+          container_id: widgetId,
+          hide_side_toolbar: false,
+          studies: ['RSI@tv-basicstudies', 'MASimple@tv-basicstudies'],
+        });
+        return true;
+      } catch (e) {
+        console.warn('Erro ao instanciar TradingView:', e);
+      }
+    }
+    return false;
+  };
+
+  if (!instantiateWidget()) {
+    if (!document.getElementById('tv-script-tag')) {
+      const script = document.createElement('script');
+      script.id = 'tv-script-tag';
+      script.src = 'https://s3.tradingview.com/tv.js';
+      script.onload = () => instantiateWidget();
+      document.head.appendChild(script);
+    } else {
+      setTimeout(instantiateWidget, 400);
+    }
+  }
 }
 
 function detailActionCarteira() {

@@ -599,24 +599,108 @@ const B3_STOCKS = [
     desc: "Dona do Instagram, WhatsApp, Facebook e pioneira em modelos de IA open-source (Llama)."
   },
 
-  // ── CRIPTOMOEDAS ────────────────────────────────────────────────────
+  // ── CRIPTOMOEDAS (BINANCE) ─────────────────────────────────────────
   {
     ticker: "BTC", name: "Bitcoin", type: "CRYPTO", sector: "Criptoativos",
     lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
     divAnual: 0.00, targetPrice: 650000.00, min52: 280000.00, max52: 600000.00,
-    desc: "Primeira e principal moeda digital descentralizada do mundo, reconhecida globalmente como ouro digital."
+    desc: "Primeira e principal moeda digital descentralizada do mundo, reserva de valor e ouro digital."
   },
   {
     ticker: "ETH", name: "Ethereum", type: "CRYPTO", sector: "Criptoativos",
     lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
     divAnual: 0.00, targetPrice: 28000.00, min52: 11000.00, max52: 25000.00,
-    desc: "Plataforma líder mundial em contratos inteligentes, finanças descentralizadas (DeFi) e tokenização de ativos reais."
+    desc: "Plataforma líder em contratos inteligentes, finanças descentralizadas (DeFi) e Web3."
   },
   {
     ticker: "SOL", name: "Solana", type: "CRYPTO", sector: "Criptoativos",
     lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
     divAnual: 0.00, targetPrice: 1500.00, min52: 450.00, max52: 1400.00,
     desc: "Blockchain de altíssimo desempenho voltada para transações ultrarrápidas e baixo custo."
+  },
+  {
+    ticker: "BNB", name: "BNB (Binance Coin)", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 4800.00, min52: 1800.00, max52: 4300.00,
+    desc: "Token nativo da BNB Chain e do ecossistema Binance, maior corretora cripto do mundo."
+  },
+  {
+    ticker: "XRP", name: "XRP (Ripple)", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 15.00, min52: 2.50, max52: 18.00,
+    desc: "Rede de liquidação bruta em tempo real e pagamentos transfronteiriços rápidos e baratos."
+  },
+  {
+    ticker: "DOGE", name: "Dogecoin", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 2.50, min52: 0.35, max52: 2.20,
+    desc: "Primeira e mais popular memecoin descentralizada ponto a ponto com ampla comunidade."
+  },
+  {
+    ticker: "ADA", name: "Cardano", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 6.00, min52: 1.50, max52: 5.50,
+    desc: "Plataforma de contratos inteligentes baseada em pesquisa científica e consenso proof-of-stake."
+  },
+  {
+    ticker: "AVAX", name: "Avalanche", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 320.00, min52: 95.00, max52: 280.00,
+    desc: "Plataforma de contratos inteligentes com finalidade em menos de 1 segundo e arquitetura de sub-redes."
+  },
+  {
+    ticker: "LINK", name: "Chainlink", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 140.00, min52: 45.00, max52: 125.00,
+    desc: "Rede descentralizada de oráculos líder no mercado conectando blockchains ao mundo real e RWA."
+  },
+  {
+    ticker: "SUI", name: "Sui Network", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 25.00, min52: 4.50, max52: 22.00,
+    desc: "Blockchain de camada 1 orientada a objetos desenvolvida em linguagem Move com altíssima taxa de transferência."
+  },
+  {
+    ticker: "DOT", name: "Polkadot", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 60.00, min52: 20.00, max52: 55.00,
+    desc: "Protocolo de rede multi-chain que conecta diferentes blockchains permitindo interoperabilidade."
+  },
+  {
+    ticker: "NEAR", name: "NEAR Protocol", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 55.00, min52: 15.00, max52: 48.00,
+    desc: "Plataforma em nuvem descentralizada e amigável ao desenvolvedor com foco em Inteligência Artificial e usabilidade."
+  },
+  {
+    ticker: "LTC", name: "Litecoin", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 650.00, min52: 320.00, max52: 580.00,
+    desc: "Criada como a 'prata digital' para o Bitcoin, com tempos de confirmação mais rápidos."
+  },
+  {
+    ticker: "SHIB", name: "Shiba Inu", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 0.00025, min52: 0.00005, max52: 0.00020,
+    desc: "Ecossistema descentralizado com exchange própria (ShibaSwap) e solução layer-2 (Shibarium)."
+  },
+  {
+    ticker: "PEPE", name: "Pepe", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 0.00015, min52: 0.00003, max52: 0.00012,
+    desc: "Uma das maiores memecoins da rede Ethereum com grande volume global negociado na Binance."
+  },
+  {
+    ticker: "UNI", name: "Uniswap", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 90.00, min52: 30.00, max52: 80.00,
+    desc: "Maior exchange descentralizada (DEX) e formadora de mercado automatizada (AMM) da Web3."
+  },
+  {
+    ticker: "RENDER", name: "Render Token", type: "CRYPTO", sector: "Criptoativos",
+    lpa: null, vpa: null, dy: 0.00, pl: null, pvp: null, roe: null, netMargin: null,
+    divAnual: 0.00, targetPrice: 70.00, min52: 25.00, max52: 65.00,
+    desc: "Rede descentralizada de computação gráfica em GPU para Inteligência Artificial e renderização 3D."
   }
 ];
 
