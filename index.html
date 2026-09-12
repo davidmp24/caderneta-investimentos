@@ -50,6 +50,17 @@
       </div>
     </div>
 
+    <!-- Banner quando carteira for detectada via link/hash -->
+    <div id="detected-vault-banner" style="display:none;background:rgba(63,185,80,0.12);border:1px solid rgba(63,185,80,0.4);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:14px;font-size:0.8rem;color:#7ee787;">
+      <div style="font-weight:700;display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Carteira Recebida do Smartphone!</span>
+      </div>
+      <div style="color:var(--text-secondary);font-size:0.75rem;line-height:1.4;">
+        Digite seu PIN abaixo para descriptografar e carregar todos os seus ativos neste computador.
+      </div>
+    </div>
+
     <!-- Alternador: Login Local vs Conectar Carteira Existente -->
     <div class="login-mode-tabs" id="login-mode-tabs">
       <button type="button" id="tab-login-pin" class="login-mode-btn active" onclick="switchLoginMode('pin')">
@@ -57,7 +68,7 @@
       </button>
       <button type="button" id="tab-login-sync" class="login-mode-btn" onclick="switchLoginMode('sync')">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
-        Conectar Carteira (Nuvem)
+        Conectar Carteira (Link / Código / Nuvem)
       </button>
     </div>
 
@@ -83,13 +94,13 @@
     <!-- Formulário 2: Conectar Carteira Existente do Celular / PC via Sync ID ou Link -->
     <form class="login-form" id="sync-connect-form" autocomplete="off" style="display:none;">
       <div class="form-group">
-        <label class="login-label" for="sync-input-id">ID de Sincronização ou Código do Cofre</label>
+        <label class="login-label" for="sync-input-id">Link Completo, Código do Cofre ou Sync ID</label>
         <input type="text" id="sync-input-id" class="login-input"
-          placeholder="Cole o Sync ID (CAD-...) ou Código do Cofre"
-          style="font-family:var(--font-mono);font-size:0.8rem;letter-spacing:0.04em;"
+          placeholder="Cole aqui o link ou código gerado no celular"
+          style="font-family:var(--font-mono);font-size:0.78rem;letter-spacing:0.02em;"
           autocomplete="off">
         <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-          No celular: abra <em>Ajustes &gt; Parear</em> e copie o <strong>Link</strong> ou <strong>Código</strong>.
+          No celular: abra <em>Ajustes &gt; Transferir Carteira</em> e clique em <strong>"Copiar Link"</strong> ou <strong>"Copiar Código"</strong>.
         </div>
       </div>
       <div class="form-group">
@@ -403,31 +414,55 @@
          ══════════════════════════════════════════════════════════ -->
     <section id="view-config" class="view-section">
 
-      <!-- Grupo: Sincronização em Nuvem (Multi-Dispositivo) -->
-      <div class="config-group" style="border: 1px solid rgba(88, 166, 255, 0.25); background: linear-gradient(180deg, rgba(56, 139, 253, 0.04) 0%, rgba(22, 27, 34, 0.6) 100%);">
+      <!-- Grupo: Sincronização & Transferência Celular ↔ PC -->
+      <div class="config-group" style="border: 1px solid rgba(88, 166, 255, 0.3); background: linear-gradient(180deg, rgba(56, 139, 253, 0.06) 0%, rgba(22, 27, 34, 0.7) 100%);">
         <div class="config-group-title" style="color: var(--accent-blue);">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
-          Sincronização em Nuvem (Celular &amp; PC)
-          <span class="badge badge-success" style="font-size:0.65rem;margin-left:auto;">AES-256 Ponta a Ponta</span>
+          Transferência &amp; Sincronização (Celular ↔ PC)
+          <span class="badge badge-success" style="font-size:0.65rem;margin-left:auto;">AES-256 Direto</span>
+        </div>
+
+        <!-- Card de Ação Rápida: Transferir para o PC / Importar -->
+        <div class="config-item" style="flex-direction:column;align-items:flex-start;gap:12px;padding:14px 16px;">
+          <div class="config-info" style="width:100%;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <span class="config-label" style="font-size:0.9rem;">📲 Transferir Carteira para o PC</span>
+              <span class="badge badge-blue" style="font-size:0.65rem;">Cofre Auto-Contido</span>
+            </div>
+            <span class="config-desc" style="margin-top:4px;">
+              Gera um link direto ou código com <strong>todos os seus novos lançamentos</strong> para abrir no computador instantaneamente.
+            </span>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;width:100%;">
+            <button type="button" class="btn-primary" onclick="copySyncPairingLink()" style="font-size:0.75rem;padding:7px 12px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Copiar Link Direto
+            </button>
+            <button type="button" class="btn-secondary" onclick="copyVaultCode()" style="font-size:0.75rem;padding:7px 12px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copiar Código do Cofre
+            </button>
+            <button type="button" class="btn-secondary" onclick="openSyncQrModal()" style="font-size:0.75rem;padding:7px 12px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              QR Code
+            </button>
+            <button type="button" class="btn-secondary" onclick="openModal('modal-import-vault')" style="font-size:0.75rem;padding:7px 12px;border-color:var(--accent-green);color:var(--accent-green);">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              📥 Importar Carteira do Celular
+            </button>
+          </div>
         </div>
 
         <div class="config-item">
           <div class="config-info">
             <span class="config-label">ID da sua Carteira (Sync ID)</span>
-            <span class="config-desc">Use este ID no computador com o seu mesmo PIN para sincronizar todos os seus dados.</span>
+            <span class="config-desc">Identificador único local do cofre.</span>
             <div class="sync-id-box">
               <span id="cfg-sync-id" class="sync-id-code">CAD-....-....</span>
               <button type="button" class="btn-xs-copy" onclick="copySyncId()" title="Copiar ID">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 ID
-              </button>
-              <button type="button" class="btn-xs-copy" onclick="copySyncPairingLink()" title="Copiar Link de Acesso com Carteira">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                Link
-              </button>
-              <button type="button" class="btn-xs-qr" onclick="openSyncQrModal()" title="Exibir QR Code para escanear">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                QR Code
               </button>
             </div>
           </div>
@@ -437,24 +472,18 @@
           <div class="config-info">
             <span class="config-label">Status da Conexão</span>
             <span class="config-desc" id="cfg-sync-status-desc">
-              <span class="sync-status-indicator online">●</span> Cofre sincronizado com a nuvem · <span id="cfg-sync-time">Atualizado</span>
+              <span class="sync-status-indicator online">●</span> Cofre sincronizado · <span id="cfg-sync-time">Atualizado</span>
             </span>
           </div>
-          <button class="btn-secondary" id="btn-force-sync" onclick="forceCloudSync()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
-            Sincronizar Agora
-          </button>
-        </div>
-
-        <div class="config-item">
-          <div class="config-info">
-            <span class="config-label">Segurança &amp; Servidor</span>
-            <span class="config-desc">Cofre Cifrado Zero-Knowledge. Seus dados nunca trafegam em aberto.</span>
+          <div style="display:flex;gap:6px;">
+            <button class="btn-secondary" id="btn-force-sync" onclick="forceCloudSync()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+              Sincronizar
+            </button>
+            <button class="btn-secondary" onclick="openCloudModal()" title="Configurar Servidor de Nuvem">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
           </div>
-          <button class="btn-secondary" onclick="openCloudModal()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            Nuvem
-          </button>
         </div>
       </div>
 
@@ -1350,6 +1379,41 @@
       <div class="modal-footer">
         <button type="button" class="btn-secondary" onclick="closeModal('modal-custom-target')">Cancelar</button>
         <button type="submit" class="btn-primary">Salvar Alvo</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MODAL: IMPORTAR CARTEIRA DO CELULAR NO PC
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="modal-import-vault" class="modal-overlay">
+  <div class="modal-card" style="max-width:460px;">
+    <div class="modal-header">
+      <h3 class="modal-title">📥 Importar Carteira do Celular</h3>
+      <button class="modal-close-btn" onclick="closeModal('modal-import-vault')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="import-vault-form" onsubmit="handleImportVaultModal(event)">
+      <div class="form-group">
+        <label class="form-label" for="import-vault-input">Link de Acesso, Código do Cofre ou Sync ID *</label>
+        <textarea id="import-vault-input" class="form-textarea" rows="3" placeholder="Cole aqui o link copiado no celular (ou o código do cofre/Sync ID)" required style="font-family:var(--font-mono);font-size:0.75rem;word-break:break-all;"></textarea>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
+          💡 <strong>Como fazer:</strong> No celular, vá em <em>Ajustes &gt; Transferir Carteira</em>, clique em <strong>"Copiar Link"</strong> ou <strong>"Copiar Código"</strong>, envie para o PC (WhatsApp/Email) e cole aqui.
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="import-vault-pin">PIN da Carteira *</label>
+        <input type="password" id="import-vault-pin" class="form-input" placeholder="Digite o PIN cadastrado no celular" required maxlength="32">
+      </div>
+      <div id="import-vault-error" class="login-error" style="display:none;margin-bottom:12px;"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="closeModal('modal-import-vault')">Cancelar</button>
+        <button type="submit" class="btn-primary" id="btn-import-vault-submit">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Carregar Carteira
+        </button>
       </div>
     </form>
   </div>

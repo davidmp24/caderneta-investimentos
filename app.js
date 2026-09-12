@@ -11,7 +11,7 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION        = '1.7.1';
+const APP_VERSION        = '1.7.2';
 const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
 const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
 const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
@@ -532,34 +532,96 @@ function switchLoginMode(mode) {
   }
 }
 
-/* ─── Login Flow ─────────────────────────────────────────── */
-function initLoginScreen() {
-  const meta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
-  if (!meta) {
-    // Primeiro acesso — sem dados ainda
-    isFirstAccess = true;
-    document.getElementById('first-access-msg').style.display = 'block';
+/* ─── Helpers de Parsing e Aplicação de Cofre (Zero-Knowledge) ─── */
+function parseVaultTransferBlob(str) {
+  if (!str) return null;
+  const raw = str.trim();
+  try {
+    const jsonStr = decodeURIComponent(escape(atob(raw)));
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && parsed.authMeta && parsed.encData) return parsed;
+  } catch {}
+  try {
+    const jsonStr = decodeURIComponent(atob(raw));
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && parsed.authMeta && parsed.encData) return parsed;
+  } catch {}
+  try {
+    const parsed = JSON.parse(atob(raw));
+    if (parsed && parsed.authMeta && parsed.encData) return parsed;
+  } catch {}
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.authMeta && parsed.encData) return parsed;
+  } catch {}
+  return null;
+}
+
+function applyDecryptedVault(vault, pin) {
+  if (!vault || !vault.authMeta || !vault.encData) {
+    return { success: false, error: 'Dados do cofre inválidos ou incompletos.' };
+  }
+  if (!pin || pin.length < 4) {
+    return { success: false, error: 'PIN deve ter pelo menos 4 caracteres.' };
   }
 
-  if (isBlocked()) {
-    showBlockedUI();
+  const expectedHash = hashPin(pin, vault.authMeta.salt);
+  if (expectedHash !== vault.authMeta.verifyHash) {
+    return { success: false, error: 'PIN incorreto para esta carteira.' };
   }
+
+  const key = deriveKey(pin, vault.authMeta.salt);
+  const decrypted = decryptState(vault.encData, key);
+  if (!decrypted) {
+    return { success: false, error: 'Erro ao decifrar os dados. Verifique seu PIN.' };
+  }
+
+  // Atualiza armazenamento local com todos os novos lançamentos do cofre recebido
+  const newSyncId = (vault.syncId || SyncService.getSyncId()).toUpperCase().trim();
+  localStorage.setItem(SYNC_ID_KEY, newSyncId);
+  localStorage.setItem(AUTH_KEY, JSON.stringify(vault.authMeta));
+  localStorage.setItem(STORAGE_KEY, vault.encData);
+  localStorage.setItem(LAST_SYNC_KEY, (vault.updatedAt || Date.now()).toString());
+
+  derivedKey = key;
+  isLocallyModified = false;
+  state = { portfolio: [], watchlist: [], best: JSON.parse(JSON.stringify(DEFAULT_BEST)), ...decrypted };
+  if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
+    state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+  }
+  saveAuthAttempts({});
+  window.pendingVaultTransfer = null;
+  const banner = document.getElementById('detected-vault-banner');
+  if (banner) banner.style.display = 'none';
+
+  try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch {}
+  return { success: true };
+}
+
+/* ─── Detecção de Cofre na URL ───────────────────────────── */
+function checkVaultInUrl() {
+  if (!window.location.hash) return;
 
   // 1. Detecta cofre transferido diretamente via hash (#vault=...)
-  if (window.location.hash && window.location.hash.includes('vault=')) {
+  if (window.location.hash.includes('vault=')) {
     try {
       const raw = window.location.hash.split('vault=')[1].split('&')[0];
-      const parsed = JSON.parse(decodeURIComponent(atob(raw)));
+      const parsed = parseVaultTransferBlob(raw);
       if (parsed && parsed.authMeta && parsed.encData) {
         window.pendingVaultTransfer = parsed;
-        switchLoginMode('sync');
+        const banner = document.getElementById('detected-vault-banner');
+        if (banner) banner.style.display = 'block';
+
         const inputId = document.getElementById('sync-input-id');
         if (inputId) {
           inputId.value = parsed.syncId || 'CARTEIRA-DETECTADA';
           inputId.style.borderColor = 'var(--accent-green)';
         }
-        showToast('Carteira detectada via link! Digite seu PIN para abrir.', 'success');
-        setTimeout(() => document.getElementById('sync-input-pin')?.focus(), 150);
+        showToast('📱 Carteira do Smartphone detectada! Digite seu PIN para abrir.', 'success');
+        setTimeout(() => {
+          const pinInput = document.getElementById('login-pin') || document.getElementById('sync-input-pin');
+          pinInput?.focus();
+        }, 120);
         return;
       }
     } catch (e) {
@@ -568,7 +630,7 @@ function initLoginScreen() {
   }
 
   // 2. Detecta link com sync ID (#sync=CAD-XXXX-XXXX)
-  if (window.location.hash) {
+  if (window.location.hash.includes('sync=')) {
     const match = window.location.hash.match(/sync=([A-Za-z0-9-]+)/i);
     if (match && match[1]) {
       const syncId = match[1].toUpperCase();
@@ -581,16 +643,40 @@ function initLoginScreen() {
   }
 }
 
+// Ouvir alterações na hash em tempo de execução (ex: se o usuário colar o link com o app aberto)
+window.addEventListener('hashchange', () => {
+  checkVaultInUrl();
+});
+
+/* ─── Login Flow ─────────────────────────────────────────── */
+function initLoginScreen() {
+  const meta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+  if (!meta) {
+    // Primeiro acesso — sem dados ainda
+    isFirstAccess = true;
+    const msg = document.getElementById('first-access-msg');
+    if (msg) msg.style.display = 'block';
+  }
+
+  if (isBlocked()) {
+    showBlockedUI();
+  }
+
+  checkVaultInUrl();
+}
+
 function showBlockedUI() {
   const blockedEl = document.getElementById('login-blocked');
-  blockedEl.style.display = 'block';
-  document.getElementById('login-btn').disabled = true;
+  if (blockedEl) blockedEl.style.display = 'block';
+  const loginBtn = document.getElementById('login-btn');
+  if (loginBtn) loginBtn.disabled = true;
   const update = () => {
     const rem = getRemainingBlockMinutes();
-    document.getElementById('block-timer').textContent = rem;
+    const timerEl = document.getElementById('block-timer');
+    if (timerEl) timerEl.textContent = rem;
     if (rem <= 0) {
-      blockedEl.style.display = 'none';
-      document.getElementById('login-btn').disabled = false;
+      if (blockedEl) blockedEl.style.display = 'none';
+      if (loginBtn) loginBtn.disabled = false;
       saveAuthAttempts({});
     }
   };
@@ -615,6 +701,24 @@ document.getElementById('login-form').addEventListener('submit', async function(
 
   await new Promise(r => setTimeout(r, 30)); // Micro-delay anti-timing
 
+  // 1. Caso haja cofre recebido via URL pendente (#vault=...)
+  if (window.pendingVaultTransfer) {
+    const res = applyDecryptedVault(window.pendingVaultTransfer, pin);
+    if (res.success) {
+      btn.disabled = false;
+      btn.textContent = 'Entrar';
+      showToast('Carteira do Smartphone carregada com sucesso!', 'success');
+      openApp();
+      return;
+    } else {
+      showLoginError('PIN incorreto para a carteira recebida do smartphone.');
+      btn.disabled = false;
+      btn.textContent = 'Entrar';
+      return;
+    }
+  }
+
+  // 2. Fluxo normal local
   const meta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
 
   if (!meta) {
@@ -642,8 +746,10 @@ document.getElementById('login-form').addEventListener('submit', async function(
         saveAuthAttempts(attempts);
         const remaining = MAX_ATTEMPTS - attempts.count;
         showLoginError(`PIN incorreto. Tentativas restantes: ${remaining}.`);
-        document.getElementById('login-attempts-info').textContent =
-          `${attempts.count} de ${MAX_ATTEMPTS} tentativas usadas.`;
+        const attemptsInfo = document.getElementById('login-attempts-info');
+        if (attemptsInfo) {
+          attemptsInfo.textContent = `${attempts.count} de ${MAX_ATTEMPTS} tentativas usadas.`;
+        }
       }
     } else {
       // Login bem-sucedido
@@ -678,16 +784,20 @@ document.getElementById('sync-connect-form').addEventListener('submit', async fu
   const errEl     = document.getElementById('sync-connect-error');
   const btn       = document.getElementById('sync-connect-btn');
 
-  errEl.style.display = 'none';
+  if (errEl) errEl.style.display = 'none';
 
   if (!syncInput || syncInput.length < 5) {
-    errEl.textContent = 'Informe o Sync ID (CAD-...) ou cole o Código do Cofre.';
-    errEl.style.display = 'block';
+    if (errEl) {
+      errEl.textContent = 'Informe o Link de Acesso, Código do Cofre ou Sync ID.';
+      errEl.style.display = 'block';
+    }
     return;
   }
   if (!pin || pin.length < 4) {
-    errEl.textContent = 'PIN deve ter pelo menos 4 caracteres.';
-    errEl.style.display = 'block';
+    if (errEl) {
+      errEl.textContent = 'PIN deve ter pelo menos 4 caracteres.';
+      errEl.style.display = 'block';
+    }
     return;
   }
 
@@ -699,76 +809,53 @@ document.getElementById('sync-connect-form').addEventListener('submit', async fu
 
   // 2. Caso o usuário tenha colado o Link completo (#vault=...) ou o Código do Cofre (base64) no campo
   if (!vault) {
+    let rawBlob = syncInput;
     if (syncInput.includes('#vault=')) {
-      try {
-        const b64 = syncInput.split('#vault=')[1].split('&')[0];
-        vault = JSON.parse(decodeURIComponent(atob(b64)));
-      } catch {}
-    } else if (syncInput.length > 30) {
-      try {
-        vault = JSON.parse(decodeURIComponent(atob(syncInput)));
-      } catch {
-        try { vault = JSON.parse(atob(syncInput)); } catch {}
-      }
+      rawBlob = syncInput.split('#vault=')[1].split('&')[0];
+    } else if (syncInput.includes('vault=')) {
+      rawBlob = syncInput.split('vault=')[1].split('&')[0];
     }
+    vault = parseVaultTransferBlob(rawBlob);
   }
 
   // Se tivermos o vault em mãos (via link ou código colado)
   if (vault && vault.authMeta && vault.encData) {
-    const expectedHash = hashPin(pin, vault.authMeta.salt);
-    if (expectedHash !== vault.authMeta.verifyHash) {
-      errEl.textContent = 'PIN incorreto para este cofre.';
-      errEl.style.display = 'block';
+    const res = applyDecryptedVault(vault, pin);
+    if (res.success) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Conectar e Sincronizar`;
+      showToast('Carteira conectada e sincronizada com sucesso!', 'success');
+      openApp();
+      return;
+    } else {
+      if (errEl) {
+        errEl.textContent = res.error || 'PIN incorreto para este cofre.';
+        errEl.style.display = 'block';
+      }
       btn.disabled = false;
       btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Conectar e Sincronizar`;
       return;
     }
-
-    const key = deriveKey(pin, vault.authMeta.salt);
-    const decrypted = decryptState(vault.encData, key);
-    if (!decrypted) {
-      errEl.textContent = 'Erro ao decifrar dados. Verifique seu PIN.';
-      errEl.style.display = 'block';
-      btn.disabled = false;
-      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Conectar e Sincronizar`;
-      return;
-    }
-
-    localStorage.setItem(SYNC_ID_KEY, vault.syncId || SyncService.getSyncId());
-    localStorage.setItem(AUTH_KEY, JSON.stringify(vault.authMeta));
-    localStorage.setItem(STORAGE_KEY, vault.encData);
-    localStorage.setItem(LAST_SYNC_KEY, (vault.updatedAt || Date.now()).toString());
-
-    derivedKey = key;
-    state = { portfolio: [], watchlist: [], best: JSON.parse(JSON.stringify(DEFAULT_BEST)), ...decrypted };
-    if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
-      state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
-    }
-    saveAuthAttempts({});
-    window.pendingVaultTransfer = null;
-    try { history.replaceState(null, '', window.location.pathname); } catch {}
-
-    btn.disabled = false;
-    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Conectar e Sincronizar`;
-    showToast('Carteira conectada e sincronizada com sucesso!', 'success');
-    openApp();
-    return;
   }
 
   // 3. Caso padrão: busca pelo Sync ID na nuvem
-  const cleanSyncId = syncInput.toUpperCase();
+  const cleanSyncId = syncInput.toUpperCase().replace(/.*SYNC=/i, '').split('&')[0].trim();
   try {
     const res = await SyncService.connectWallet(cleanSyncId, pin);
     if (res.success) {
       showToast('Carteira conectada e sincronizada com sucesso!', 'success');
       openApp();
     } else {
-      errEl.innerHTML = `${res.error || 'Cofre não encontrado para este ID.'}<br><span style="font-size:0.75rem;display:inline-block;margin-top:4px;">💡 <strong>Dica rápida:</strong> No seu celular, abra <em>Ajustes &gt; Parear Celular &amp; PC</em> e use <strong>"Copiar Link de Acesso"</strong> ou <strong>"Copiar Código do Cofre"</strong> para transferir diretamente.</span>`;
-      errEl.style.display = 'block';
+      if (errEl) {
+        errEl.innerHTML = `${res.error || 'Cofre não encontrado para este ID.'}<br><span style="font-size:0.75rem;display:inline-block;margin-top:4px;">💡 <strong>Dica rápida:</strong> No seu celular, abra <em>Ajustes &gt; Transferência Celular ↔ PC</em> e use <strong>"Copiar Link Direto"</strong> ou <strong>"Copiar Código do Cofre"</strong> para transferir diretamente.</span>`;
+        errEl.style.display = 'block';
+      }
     }
   } catch (err) {
-    errEl.innerHTML = `Erro ao conectar com a nuvem.<br><span style="font-size:0.75rem;display:inline-block;margin-top:4px;">💡 <strong>Dica rápida:</strong> No seu celular, abra <em>Ajustes &gt; Parear Celular &amp; PC</em> e use <strong>"Copiar Link de Acesso"</strong> para transferir diretamente.</span>`;
-    errEl.style.display = 'block';
+    if (errEl) {
+      errEl.innerHTML = `Erro ao conectar com a nuvem.<br><span style="font-size:0.75rem;display:inline-block;margin-top:4px;">💡 <strong>Dica rápida:</strong> No seu celular, abra <em>Ajustes &gt; Transferência Celular ↔ PC</em> e use <strong>"Copiar Link Direto"</strong> para transferir instantaneamente.</span>`;
+      errEl.style.display = 'block';
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Conectar e Sincronizar`;
@@ -777,6 +864,7 @@ document.getElementById('sync-connect-form').addEventListener('submit', async fu
 
 function showLoginError(msg) {
   const el = document.getElementById('login-error');
+  if (!el) return;
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 4000);
@@ -3432,7 +3520,7 @@ function escapeAttr(str) {
    ═══════════════════════════════════════════════════════════ */
 
 function getVaultTransferBlob() {
-  const syncId   = SyncService.getSyncId();
+  const syncId = SyncService.getSyncId();
   if (derivedKey) {
     const freshEnc = encryptState(derivedKey);
     if (freshEnc) localStorage.setItem(STORAGE_KEY, freshEnc);
@@ -3448,9 +3536,13 @@ function getVaultTransferBlob() {
     version: APP_VERSION,
   };
   try {
-    return btoa(encodeURIComponent(JSON.stringify(payload)));
+    return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
   } catch {
-    return null;
+    try {
+      return btoa(JSON.stringify(payload));
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -3502,6 +3594,86 @@ async function copyVaultCode() {
   } else {
     prompt('Copie o Código do Cofre:', blob);
   }
+}
+
+async function handleImportVaultModal(e) {
+  e.preventDefault();
+  const inputEl = document.getElementById('import-vault-input');
+  const pinEl   = document.getElementById('import-vault-pin');
+  const errEl   = document.getElementById('import-vault-error');
+  const btn     = document.getElementById('btn-import-vault-submit');
+
+  if (errEl) errEl.style.display = 'none';
+  const text = (inputEl?.value || '').trim();
+  const pin  = pinEl?.value || '';
+
+  if (!text) {
+    if (errEl) { errEl.textContent = 'Cole o link ou código do cofre.'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (!pin || pin.length < 4) {
+    if (errEl) { errEl.textContent = 'PIN deve ter pelo menos 4 caracteres.'; errEl.style.display = 'block'; }
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = `<svg class="spinning" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg> Importando…`;
+
+  // 1. Tentar extrair do link #vault=... ou código base64 direto
+  let rawBlob = text;
+  if (text.includes('#vault=')) {
+    rawBlob = text.split('#vault=')[1].split('&')[0];
+  } else if (text.includes('vault=')) {
+    rawBlob = text.split('vault=')[1].split('&')[0];
+  }
+
+  let vault = parseVaultTransferBlob(rawBlob);
+
+  if (vault) {
+    const res = applyDecryptedVault(vault, pin);
+    if (res.success) {
+      closeModal('modal-import-vault');
+      renderAll();
+      SyncService.updateUi();
+      showToast('Carteira importada e atualizada com sucesso!', 'success');
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Carregar Carteira`;
+      return;
+    } else {
+      if (errEl) { errEl.textContent = res.error || 'PIN incorreto para este cofre.'; errEl.style.display = 'block'; }
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Carregar Carteira`;
+      return;
+    }
+  }
+
+  // 2. Se for um Sync ID (ex: CAD-XXXX-XXXX), buscar na nuvem
+  const cleanId = text.toUpperCase().replace(/.*SYNC=/i, '').split('&')[0].trim();
+  if (cleanId.startsWith('CAD-')) {
+    try {
+      const res = await SyncService.connectWallet(cleanId, pin);
+      if (res.success) {
+        closeModal('modal-import-vault');
+        renderAll();
+        SyncService.updateUi();
+        showToast('Carteira conectada e atualizada com sucesso!', 'success');
+      } else {
+        if (errEl) { errEl.textContent = res.error || 'Erro ao sincronizar cofre.'; errEl.style.display = 'block'; }
+      }
+    } catch {
+      if (errEl) { errEl.textContent = 'Erro de rede ao conectar com a nuvem.'; errEl.style.display = 'block'; }
+    }
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Carregar Carteira`;
+    return;
+  }
+
+  if (errEl) {
+    errEl.textContent = 'Código ou Link não reconhecido. Certifique-se de copiar o Link Direto ou Código completo gerado no seu celular.';
+    errEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Carregar Carteira`;
 }
 
 let qrcodeInstance = null;
