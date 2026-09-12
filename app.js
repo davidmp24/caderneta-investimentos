@@ -11,7 +11,7 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION        = '1.7.0';
+const APP_VERSION        = '1.7.1';
 const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
 const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
 const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
@@ -26,7 +26,7 @@ const PBKDF2_ITERS       = 150_000;
 
 // Configuração Padrão da Nuvem (Zero-Knowledge: apenas cofre cifrado trafega)
 const DEFAULT_CLOUD_URL   = 'https://flexible-scorpion-106260.upstash.io';
-const DEFAULT_CLOUD_TOKEN = 'gQAAAAAAAZ8UAQIgcDI0ZjI1YzU4ZTAxZTI0NWU1YjVmMzhjZWRjMDY2OGRmMA';
+const DEFAULT_CLOUD_TOKEN = 'gQAAAAAZ8UAQIgcDI0ZjI1YzU4ZTAxZTI0NWU1YjVmMzhjZWRjMDY2OGRmMA';
 
 const CORS_PROXIES = [
   'https://corsproxy.io/?',
@@ -214,8 +214,11 @@ function resetSessionTimer() { startSessionTimer(); }
 /* ═══════════════════════════════════════════════════════════
    SERVIÇO DE SINCRONIZAÇÃO EM NUVEM (ZERO-KNOWLEDGE)
    ═══════════════════════════════════════════════════════════ */
+let isLocallyModified = false;
+
 const SyncService = {
   pushTimer: null,
+  syncInterval: null,
 
   getSyncId() {
     let id = localStorage.getItem(SYNC_ID_KEY);
@@ -239,7 +242,13 @@ const SyncService = {
   },
 
   getToken() {
-    return localStorage.getItem(CLOUD_TOKEN_KEY) || DEFAULT_CLOUD_TOKEN;
+    // Sanitização: se tiver o token antigo corrompido no localStorage, limpa e usa o padrão
+    const saved = localStorage.getItem(CLOUD_TOKEN_KEY);
+    if (saved && (saved.includes('AAAAAAAZ8UA') || saved.length > 70)) {
+      localStorage.removeItem(CLOUD_TOKEN_KEY);
+      return DEFAULT_CLOUD_TOKEN;
+    }
+    return saved || DEFAULT_CLOUD_TOKEN;
   },
 
   setUiStatus(status, text = null) {
@@ -279,10 +288,17 @@ const SyncService = {
   },
 
   async pushVault(force = false) {
-    if (!derivedKey) return;
+    if (!derivedKey) return false;
+
+    // Garante que o estado mais recente em memória está cifrado e salvo
+    const freshEnc = encryptState(derivedKey);
+    if (freshEnc) {
+      localStorage.setItem(STORAGE_KEY, freshEnc);
+    }
+
     const authMeta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
     const encData  = localStorage.getItem(STORAGE_KEY);
-    if (!authMeta || !encData) return;
+    if (!authMeta || !encData) return false;
 
     const syncId   = this.getSyncId();
     const endpoint = this.getEndpoint();
@@ -309,20 +325,25 @@ const SyncService = {
 
       if (res.ok) {
         localStorage.setItem(LAST_SYNC_KEY, payload.updatedAt.toString());
+        isLocallyModified = false;
         this.setUiStatus('online');
+        return true;
       } else {
         this.setUiStatus('offline');
+        return false;
       }
     } catch {
       this.setUiStatus('offline');
+      return false;
     }
   },
 
   debouncedPush() {
+    isLocallyModified = true;
     clearTimeout(this.pushTimer);
     this.pushTimer = setTimeout(() => {
       this.pushVault();
-    }, 1200);
+    }, 400);
   },
 
   async fetchVault(syncId) {
@@ -381,50 +402,82 @@ const SyncService = {
     localStorage.setItem(LAST_SYNC_KEY, (vault.updatedAt || Date.now()).toString());
 
     derivedKey = key;
+    isLocallyModified = false;
     state = { portfolio: [], watchlist: [], best: JSON.parse(JSON.stringify(DEFAULT_BEST)), ...decrypted };
     if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
       state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
     }
     saveAuthAttempts({});
+    this.updateUi();
     return { success: true };
   },
 
-  async checkBackgroundSync() {
+  async checkBackgroundSync(silent = true) {
     if (!derivedKey) return;
     const syncId = this.getSyncId();
+    const localEnc = localStorage.getItem(STORAGE_KEY);
     const lastLocalSync = parseInt(localStorage.getItem(LAST_SYNC_KEY) || '0');
 
     try {
       const vault = await this.fetchVault(syncId);
       if (!vault) {
-        // Enviar cofre local para inicializar na nuvem
-        await this.pushVault(true);
+        // Enviar cofre local para inicializar na nuvem se ainda não existir
+        if (localEnc) await this.pushVault(true);
         return;
       }
 
-      // Se a nuvem tiver atualização mais recente que o local (+3s tolerância)
-      if (vault.updatedAt && vault.updatedAt > (lastLocalSync + 3000)) {
-        const meta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
-        if (meta && derivedKey) {
-          const decrypted = decryptState(vault.encData, derivedKey);
-          if (decrypted) {
-            state = { portfolio: [], watchlist: [], best: JSON.parse(JSON.stringify(DEFAULT_BEST)), ...decrypted };
-            if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
-              state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+      // Se o cofre na nuvem for diferente do cofre local
+      if (vault.encData && vault.encData !== localEnc) {
+        const cloudTime = parseInt(vault.updatedAt || '0');
+
+        // Se a nuvem tiver atualização ou se o local não estiver com edições pendentes
+        if (cloudTime >= lastLocalSync || !isLocallyModified) {
+          const meta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+          if (meta && derivedKey) {
+            const decrypted = decryptState(vault.encData, derivedKey);
+            if (decrypted) {
+              state = { portfolio: [], watchlist: [], best: JSON.parse(JSON.stringify(DEFAULT_BEST)), ...decrypted };
+              if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
+                state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
+              }
+              localStorage.setItem(STORAGE_KEY, vault.encData);
+              localStorage.setItem(LAST_SYNC_KEY, cloudTime.toString());
+              if (vault.authMeta) {
+                localStorage.setItem(AUTH_KEY, JSON.stringify(vault.authMeta));
+              }
+              isLocallyModified = false;
+              renderAll();
+              this.setUiStatus('online');
+              if (!silent) {
+                showToast('Carteira sincronizada com a nuvem!', 'success');
+              }
+              return;
             }
-            localStorage.setItem(STORAGE_KEY, vault.encData);
-            localStorage.setItem(LAST_SYNC_KEY, vault.updatedAt.toString());
-            renderAll();
-            showToast('Dados sincronizados com a nuvem.', 'info');
           }
+        } else if (isLocallyModified) {
+          // O usuário fez edições locais nesta sessão que ainda não subiram
+          await this.pushVault(true);
         }
       } else {
-        // Sincronizar cofre local com a nuvem
-        await this.pushVault();
+        this.setUiStatus('online');
+        if (!silent) {
+          showToast('Tudo atualizado! Sua carteira já está sincronizada.', 'info');
+        }
       }
-    } catch {
-      // Ignora erro em background
+    } catch (err) {
+      this.setUiStatus('offline');
+      if (!silent) {
+        showToast('Erro ao sincronizar com a nuvem. Verifique a conexão.', 'error');
+      }
     }
+  },
+
+  startPeriodicSync() {
+    if (this.syncInterval) clearInterval(this.syncInterval);
+    // Sincronização automática a cada 20 segundos em segundo plano
+    this.syncInterval = setInterval(() => {
+      this.checkBackgroundSync(true);
+    }, 20000);
   },
 
   updateUi() {
@@ -436,6 +489,19 @@ const SyncService = {
     this.setUiStatus('online');
   }
 };
+
+// Sincronização instantânea ao focar ou voltar para a aba
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && derivedKey) {
+    SyncService.checkBackgroundSync(true);
+  }
+});
+
+window.addEventListener('focus', () => {
+  if (derivedKey) {
+    SyncService.checkBackgroundSync(true);
+  }
+});
 
 /* ─── Alternador de Modo de Login ────────────────────────── */
 function switchLoginMode(mode) {
@@ -859,9 +925,10 @@ function openApp() {
   enableScrollDrag('topvalue-scroll');
   initExplorer();
   refreshAllQuotes();
-  refreshBestQuotes(); // renderBestWidget chamado dentro após fetch
+  refreshBestQuotes();
   SyncService.updateUi();
-  SyncService.checkBackgroundSync();
+  SyncService.checkBackgroundSync(true);
+  SyncService.startPeriodicSync();
 }
 
 function handleLogout() {
@@ -2045,6 +2112,40 @@ async function refreshBestQuotes() {
     renderBestWidget();
   } catch (err) {
     console.warn('Erro ao atualizar cotações Best:', err);
+  }
+}
+
+async function refreshAllQuotes() {
+  const btn = document.getElementById('btn-sync-quotes');
+  if (btn) btn.classList.add('spinning');
+
+  const portfolioTickers = (state.portfolio || []).map(p => p.ticker);
+  const watchlistTickers = (state.watchlist || []).map(w => w.ticker);
+  const bestTickers = (state.best || []).map(b => b.ticker);
+  const allTickers = [...new Set([...portfolioTickers, ...watchlistTickers, ...bestTickers])];
+
+  try {
+    if (allTickers.length > 0) {
+      allTickers.forEach(t => delete QuoteService.cache[t]);
+      const quotes = await QuoteService.getQuotes(allTickers);
+      for (const [t, q] of Object.entries(quotes)) {
+        if (q) bestPrices[t] = q;
+      }
+    }
+    renderAll();
+    renderBestWidget();
+    renderFavoritosWidget();
+    renderVolumeWidget();
+    renderTopValueWidget();
+
+    // Sincronização em nuvem também!
+    if (derivedKey) {
+      await SyncService.checkBackgroundSync(true);
+    }
+  } catch (err) {
+    console.warn('Erro ao atualizar cotações:', err);
+  } finally {
+    if (btn) btn.classList.remove('spinning');
   }
 }
 
@@ -3330,21 +3431,12 @@ function escapeAttr(str) {
    HELPERS DE SINCRONIZAÇÃO & QR CODE
    ═══════════════════════════════════════════════════════════ */
 
-function copySyncId() {
-  const syncId = SyncService.getSyncId();
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(syncId).then(() => {
-      showToast(`ID copiado: ${syncId}`, 'success');
-    }).catch(() => {
-      prompt('Copie seu ID de Sincronização:', syncId);
-    });
-  } else {
-    prompt('Copie seu ID de Sincronização:', syncId);
-  }
-}
-
 function getVaultTransferBlob() {
   const syncId   = SyncService.getSyncId();
+  if (derivedKey) {
+    const freshEnc = encryptState(derivedKey);
+    if (freshEnc) localStorage.setItem(STORAGE_KEY, freshEnc);
+  }
   const authMeta = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
   const encData  = localStorage.getItem(STORAGE_KEY);
   if (!authMeta || !encData) return null;
@@ -3362,8 +3454,23 @@ function getVaultTransferBlob() {
   }
 }
 
-function copySyncPairingLink() {
+async function copySyncId() {
   const syncId = SyncService.getSyncId();
+  SyncService.pushVault(true).catch(() => {});
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(syncId).then(() => {
+      showToast(`ID copiado: ${syncId}`, 'success');
+    }).catch(() => {
+      prompt('Copie seu ID de Sincronização:', syncId);
+    });
+  } else {
+    prompt('Copie seu ID de Sincronização:', syncId);
+  }
+}
+
+async function copySyncPairingLink() {
+  const syncId = SyncService.getSyncId();
+  SyncService.pushVault(true).catch(() => {});
   const blob   = getVaultTransferBlob();
   const base   = window.location.href.split('#')[0];
   const url    = blob ? `${base}#vault=${blob}` : `${base}#sync=${syncId}`;
@@ -3379,7 +3486,8 @@ function copySyncPairingLink() {
   }
 }
 
-function copyVaultCode() {
+async function copyVaultCode() {
+  SyncService.pushVault(true).catch(() => {});
   const blob = getVaultTransferBlob();
   if (!blob) {
     showToast('Nenhum cofre encontrado para transferir.', 'error');
@@ -3397,8 +3505,9 @@ function copyVaultCode() {
 }
 
 let qrcodeInstance = null;
-function openSyncQrModal() {
+async function openSyncQrModal() {
   const syncId = SyncService.getSyncId();
+  SyncService.pushVault(true).catch(() => {});
   SyncService.updateUi();
 
   const container = document.getElementById('sync-qrcode-container');
