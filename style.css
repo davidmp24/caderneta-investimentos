@@ -462,7 +462,7 @@ main {
 .cat-other  { background: var(--text-muted); }
 
 /* ==========================================================================
-   FAVORITOS WIDGET (Quick Access Horizontal Scroll)
+   FAVORITAS (Lista Limpa com Logos)
    ========================================================================== */
 .widget-section {
   display: flex;
@@ -474,6 +474,8 @@ main {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .widget-title {
@@ -509,87 +511,84 @@ main {
   border-color: rgba(88, 166, 255, 0.4);
 }
 
-.favoritos-scroll {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-  scroll-behavior: smooth;
-  cursor: grab;
+.favoritas-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
 }
 
-.favoritos-scroll:active, .favoritos-scroll.grabbing {
-  cursor: grabbing;
-}
-
-.favoritos-scroll::-webkit-scrollbar {
-  height: 5px;
-}
-
-.favoritos-scroll::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 4px;
-}
-
-.favoritos-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 4px;
-}
-
-.favoritos-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(227, 179, 65, 0.45);
-}
-
-.fav-card {
-  flex-shrink: 0;
-  width: 140px;
+.fav-list-card {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
-  padding: 12px;
+  padding: 10px 12px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   cursor: pointer;
-  transition: border-color var(--ease-fast), background var(--ease-fast);
+  transition: all var(--ease-fast);
 }
 
-.fav-card:hover {
+.fav-list-card:hover {
   border-color: var(--accent-blue);
   background: var(--bg-card-hover);
+  transform: translateY(-1px);
+}
+
+.fav-list-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.fav-list-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .fav-ticker {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .fav-name {
-  font-size: 0.66rem;
+  font-size: 0.68rem;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 110px;
+}
+
+.fav-list-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .fav-price {
-  font-size: 0.88rem;
-  font-weight: 600;
+  font-size: 0.86rem;
+  font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
 .fav-margin {
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 600;
-  padding: 2px 6px;
+  padding: 1px 5px;
   border-radius: var(--radius-xs);
   display: inline-block;
-  align-self: flex-start;
 }
 
 .fav-margin.ok { background: var(--accent-green-dim); color: var(--accent-green); }
@@ -597,11 +596,12 @@ main {
 .fav-margin.neutral { background: var(--bg-surface); color: var(--text-secondary); }
 
 .fav-empty {
-  flex-shrink: 0;
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 16px;
   border-radius: var(--radius-md);
   border: 1px dashed var(--border-card);
   color: var(--text-muted);

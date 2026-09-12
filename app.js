@@ -11,7 +11,7 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION        = '1.7.2';
+const APP_VERSION        = '1.7.3';
 const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
 const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
 const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
@@ -1005,12 +1005,6 @@ function openApp() {
   startSessionTimer();
   renderAll();
   renderFavoritosWidget();
-  renderVolumeWidget();
-  renderTopValueWidget();
-  enableScrollDrag('best-scroll');
-  enableScrollDrag('favoritos-scroll');
-  enableScrollDrag('volume-scroll');
-  enableScrollDrag('topvalue-scroll');
   initExplorer();
   refreshAllQuotes();
   refreshBestQuotes();
@@ -1451,7 +1445,6 @@ function switchTab(tab) {
   if (tab === 'reports')  renderReports();
   if (tab === 'goals')    renderGoalsView();
   if (tab === 'carteira') {
-    renderBestWidget();
     renderFavoritosWidget();
     renderHeroGoalsBadge();
   }
@@ -1622,46 +1615,97 @@ function renderSummary() {
   document.getElementById('total-lucro-nominal').textContent = privacyMode ? 'R$ ••••••' : (lucro >= 0 ? '+' : '') + fmt(lucro);
 
   const badge = document.getElementById('badge-rentabilidade-total');
-  badge.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
-  badge.className   = `badge-profit ${pct >= 0 ? 'positive' : 'negative'}`;
+  if (badge) {
+    badge.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+    badge.className   = `badge-profit ${pct >= 0 ? 'positive' : 'negative'}`;
+  }
 
   const now = new Date();
-  document.getElementById('last-sync-time').textContent =
-    now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const syncTimeEl = document.getElementById('last-sync-time');
+  if (syncTimeEl) {
+    syncTimeEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  const goals = getGoalsState();
+  const metaTarget = parseFloat(goals.retirementTarget) || 1000000;
+  const metaTargetEl = document.getElementById('summary-meta-target');
+  if (metaTargetEl) {
+    metaTargetEl.textContent = fmtPrivate(metaTarget);
+  }
 
   renderAllocation();
   renderHeroGoalsBadge(totalAtual);
 }
 
 function renderAllocation() {
-  const cats = {};
+  const sectors = {};
   let total = 0;
+
   for (const a of state.portfolio) {
-    const val = (parseFloat(a.quantity) || 0) * (parseFloat(a.currentPrice) || parseFloat(a.avgPrice) || 0);
-    cats[a.type] = (cats[a.type] || 0) + val;
+    const qty = parseFloat(a.quantity) || 0;
+    const quote = getStockQuoteData(a.ticker);
+    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice)
+      : (quote?.price != null ? quote.price : (parseFloat(a.avgPrice) || 0));
+    const val = qty * cur;
+    if (val <= 0) continue;
+
+    // Determinar o Setor do Investimento
+    let sectorName = '';
+    const info = getStockInfo(a.ticker);
+
+    if (a.type === 'CRYPTO') {
+      sectorName = 'Criptoativos';
+    } else if (a.type === 'FIXED') {
+      sectorName = 'Renda Fixa';
+    } else if (a.type === 'ETF') {
+      sectorName = (info.sector && info.sector !== 'Carteira Pessoal' && info.sector !== 'Mercado B3') ? info.sector : 'ETFs & Índices';
+    } else if (a.type === 'FII') {
+      sectorName = (info.sector && info.sector !== 'Carteira Pessoal' && info.sector !== 'Mercado B3') ? info.sector : 'FIIs Imobiliários';
+    } else {
+      sectorName = (info.sector && info.sector !== 'Carteira Pessoal' && info.sector !== 'Mercado B3') ? info.sector : 'Ações B3';
+    }
+
+    sectors[sectorName] = (sectors[sectorName] || 0) + val;
     total += val;
   }
 
-  const colors = { STOCK:'cat-stock', FII:'cat-fii', ETF:'cat-etf', CRYPTO:'cat-crypto', FIXED:'cat-fixed', OTHER:'cat-other' };
-  const labels = { STOCK:'Ações', FII:'FIIs', ETF:'ETFs', CRYPTO:'Cripto', FIXED:'R.Fixa', OTHER:'Outros' };
-
   const bar = document.getElementById('allocation-bar');
   const legend = document.getElementById('allocation-legend');
+  if (!bar || !legend) return;
   bar.innerHTML = ''; legend.innerHTML = '';
 
-  for (const [cat, val] of Object.entries(cats)) {
-    if (!val) continue;
-    const pct = total > 0 ? (val / total) * 100 : 0;
+  if (total <= 0) {
+    bar.innerHTML = `<div class="alloc-segment" style="width:100%;background:var(--border-card);"></div>`;
+    legend.innerHTML = `<div class="legend-item" style="color:var(--text-muted);">Nenhum ativo alocado</div>`;
+    return;
+  }
+
+  const SECTOR_PALETTE = [
+    '#388bfd', '#3fb950', '#d29922', '#bc8cff', '#f85149',
+    '#58a6ff', '#56d364', '#e3b341', '#db61a2', '#f0883e',
+    '#79c0ff', '#7ee787', '#d89c36', '#a371f7', '#8b949e'
+  ];
+
+  // Ordenar setores do maior para o menor valor
+  const sorted = Object.entries(sectors).sort((a, b) => b[1] - a[1]);
+
+  sorted.forEach(([sector, val], idx) => {
+    const pct = (val / total) * 100;
+    const color = SECTOR_PALETTE[idx % SECTOR_PALETTE.length];
+
     const seg = document.createElement('div');
-    seg.className = `alloc-segment ${colors[cat] || 'cat-other'}`;
+    seg.className = 'alloc-segment';
     seg.style.width = pct + '%';
+    seg.style.backgroundColor = color;
+    seg.title = `${sector}: ${fmtPrivate(val)} (${pct.toFixed(1)}%)`;
     bar.appendChild(seg);
 
     const li = document.createElement('div');
     li.className = 'legend-item';
-    li.innerHTML = `<span class="legend-dot ${colors[cat] || 'cat-other'}"></span>${labels[cat] || cat} ${pct.toFixed(1)}%`;
+    li.innerHTML = `<span class="legend-dot" style="background-color:${color};"></span>${escapeHtml(sector)} <strong>${pct.toFixed(1)}%</strong>`;
     legend.appendChild(li);
-  }
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1909,283 +1953,110 @@ function renderWatchlist() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   WIDGET DE FAVORITOS (Radar Quick Access)
+   FAVORITAS (Lista Clean com Logos & Cotações em Tempo Real)
    ═══════════════════════════════════════════════════════════ */
 
 function renderFavoritosWidget() {
   const container = document.getElementById('favoritos-scroll');
   if (!container) return;
 
-  let items = [...state.watchlist];
-  if (currentFilter !== 'ALL') {
-    items = items.filter(a => a.type === currentFilter);
-  }
-  items = items.slice(0, 10);
-
-  if (items.length === 0) {
-    container.innerHTML = `
-      <div class="fav-empty">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-        </svg>
-        ${currentFilter !== 'ALL' ? 'Nenhum ativo desta categoria no Radar' : 'Adicione ativos ao Radar para vê-los aqui'}
-      </div>`;
-    return;
-  }
-
-  const marketOpen = isB3MarketOpen();
-
-  container.innerHTML = items.map(a => {
-    const quote  = getStockQuoteData(a.ticker);
-    const cur    = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
-      ? parseFloat(a.currentPrice)
-      : (quote?.price != null ? quote.price : null);
-    const target = parseFloat(a.targetPrice)  || null;
-    const isClosedVal = !marketOpen || quote?.isClosed;
-
-    let marginHtml = '';
-    if (cur && target) {
-      const below = cur < target;
-      const pct   = Math.abs(((cur - target) / target) * 100).toFixed(1);
-      marginHtml = `<span class="fav-margin ${below ? 'ok' : 'over'}">
-        ${below ? '▲' : '▼'} ${pct}% ${below ? 'abaixo' : 'acima'}
-      </span>`;
-    } else {
-      marginHtml = `<span class="fav-margin neutral">Sem teto</span>`;
-    }
-
-    return `
-    <div class="fav-card" onclick="openAssetDetail('${a.ticker}')" style="cursor:pointer;" title="Clique para ver gráfico TradingView e Preço Justo de ${escapeHtml(a.ticker)}">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-        ${renderAssetLogoHtml(a.ticker, 'fav-logo')}
-        <div style="flex:1;min-width:0;">
-          <div class="fav-ticker">${escapeHtml(a.ticker)}</div>
-          ${a.name ? `<div class="fav-name">${escapeHtml(a.name)}</div>` : ''}
-        </div>
-      </div>
-      <div class="fav-price">${cur ? fmtN(cur) : '—'}</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-top:2px;">
-        ${marginHtml}
-        <span class="best-badge-status ${isClosedVal ? 'closed' : 'open'}" style="font-size:0.58rem;padding:0 4px;">
-          ${isClosedVal ? 'Fechamento' : 'Ao vivo'}
-        </span>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-/* ═══════════════════════════════════════════════════════════
-   WIDGET MAIOR VOLUME — B3 & MERCADOS
-   ═══════════════════════════════════════════════════════════ */
-
-// Ativos de maior volume médio diário por categoria
-const MARKET_CATEGORY_TICKERS = {
-  ALL: {
-    volume: ['PETR4','VALE3','ITUB4','BBDC4','B3SA3','ABEV3','WEGE3','BBAS3','ALUP4','HGLG11','MXRF11','BOVA11','IVVB11','BTC','ETH'],
-    value:  ['PETR4','VALE3','ITUB4','BBAS3','WEGE3','ALUP11','RADL3','SUZB3','EMBR3','HGLG11','KNIP11','IVVB11','AAPL34','BTC','MSFT34'],
-  },
-  STOCK: {
-    volume: ['PETR4','VALE3','ITUB4','BBDC4','B3SA3','ABEV3','WEGE3','BBAS3','ELET3','RENT3','ALUP4','LREN3','MGLU3','CSAN3','VBBR3','PRIO3','EMBR3','GGBR4','CSNA3','USIM5','CPFE3','ENGI11'],
-    value:  ['PETR4','VALE3','ITUB4','BBAS3','WEGE3','RENT3','ABEV3','B3SA3','BBDC4','ALUP11','ALUP4','RADL3','SUZB3','EMBR3','EQTL3','CPLE6','EGIE3','TAEE11','TOTS3','FLRY3','PSSA3'],
-  },
-  FII: {
-    volume: ['MXRF11','HGLG11','BTLG11','XPML11','KNCR11','CPTS11','VISC11','TRXF11','TGAR11','VGIR11','XPLG11','KNIP11','HGRU11','SNAG11'],
-    value:  ['KNIP11','KNCR11','HGLG11','KNRI11','XPML11','BTLG11','VISC11','MXRF11','TRXF11','XPLG11','HGRU11','TGAR11'],
-  },
-  ETF: {
-    volume: ['BOVA11','IVVB11','SMAL11','HASH11','SPXI11','NASD11','GOLD11','AAPL34','NVDC34','MSFT34','AMZO34','GOGL34','TSLA34','MELI34'],
-    value:  ['IVVB11','BOVA11','SPXI11','AAPL34','MSFT34','NVDC34','AMZO34','GOGL34','META34','TSLA34','MELI34','HASH11'],
-  },
-  CRYPTO: {
-    volume: ['BTC','ETH','SOL','HASH11','BITH11','ETHE11'],
-    value:  ['BTC','ETH','SOL','HASH11','BITH11','ETHE11'],
-  },
-  FIXED: {
-    volume: ['KNCR11','VGIR11','SNAG11','KNIP11','CPTS11'],
-    value:  ['KNCR11','KNIP11','SNAG11','VGIR11','CPTS11'],
-  }
-};
-
-function getActiveTickersForCategory(type) {
-  const cat = MARKET_CATEGORY_TICKERS[currentFilter] || MARKET_CATEGORY_TICKERS.ALL;
-  return cat[type] || MARKET_CATEGORY_TICKERS.ALL[type];
-}
-
-function _renderMarketWidget(containerId, tickerList, accentColor) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  const marketOpen = isB3MarketOpen();
-  const tickers = tickerList || [];
-
-  container.innerHTML = tickers.map(ticker => {
-    const info  = getStockInfo(ticker);
-    const quote = getStockQuoteData(ticker);
-    const price = quote?.price ?? null;
-    const chg   = quote?.changePercent ?? quote?.change ?? null;
-    const isClosedVal = !marketOpen || quote?.isClosed;
-    const chgClass = chg == null ? 'neutral' : chg >= 0 ? 'pos' : 'neg';
-    const chgHtml  = chg != null
-      ? `<span class="best-change ${chgClass}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>`
-      : `<span class="best-change neutral">—</span>`;
-
-    return `
-    <div class="best-card market-widget-card" onclick="openAssetDetail('${ticker}')" style="cursor:pointer;--accent-card:${accentColor};" title="${escapeHtml(info.name || ticker)}">
-      <div class="best-card-top">
-        ${renderAssetLogoHtml(ticker, 'fav-logo')}
-        <div class="best-card-info">
-          <div class="best-ticker">${ticker}</div>
-          <div class="best-name">${escapeHtml((info.name || '').slice(0, 14))}</div>
-        </div>
-      </div>
-      <div class="best-price">${price != null ? fmtN(price) : '—'}</div>
-      <div class="best-market-sub">
-        ${chgHtml}
-        <span class="best-badge-status ${isClosedVal ? 'closed' : 'open'}" style="font-size:0.58rem;">
-          ${isClosedVal ? 'Fechado' : 'Ao vivo'}
-        </span>
-      </div>
-    </div>`;
-  }).join('');
-
-  enableScrollDrag(containerId);
-
-  // Buscar cotações e atualizar os preços in-place (sem re-renderizar para evitar loop infinito)
-  QuoteService.getQuotes(tickers).then(quotes => {
-    tickers.forEach(t => {
-      const q = quotes[t];
-      if (!q?.price) return;
-      bestPrices[t] = q;
-
-      // Atualizar preço no card existente sem re-renderizar
-      const card = container.querySelector(`.best-card[onclick*="'${t}'"]`);
-      if (!card) return;
-      const priceEl = card.querySelector('.best-price');
-      if (priceEl) priceEl.textContent = fmtN(q.price);
-
-      const chg = q.changePercent ?? q.change ?? null;
-      const chgEl = card.querySelector('.best-change');
-      if (chgEl && chg != null) {
-        chgEl.className = `best-change ${chg >= 0 ? 'pos' : 'neg'}`;
-        chgEl.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
-      }
-    });
-  });
-}
-
-function renderVolumeWidget()   { _renderMarketWidget('volume-scroll',   getActiveTickersForCategory('volume'), 'var(--accent-blue)'); }
-function renderTopValueWidget() { _renderMarketWidget('topvalue-scroll', getActiveTickersForCategory('value'),  'var(--accent-green)'); }
-
-/* ═══════════════════════════════════════════════════════════
-   WIDGET BEST — SELEÇÃO PESSOAL (Editável)
-   ═══════════════════════════════════════════════════════════ */
-
-function renderBestWidget() {
-  const container = document.getElementById('best-scroll');
-  if (!container) return;
-
   if (!state.best || !Array.isArray(state.best) || state.best.length === 0) {
     state.best = JSON.parse(JSON.stringify(DEFAULT_BEST));
   }
 
-  // Filtrar itens do Best se houver filtro ativo diferente de ALL
   let items = [...state.best];
+
+  // Filtragem por categoria se houver filtro ativo
   if (currentFilter !== 'ALL') {
     const filtered = items.filter(b => {
       const info = getStockInfo(b.ticker);
       return info.type === currentFilter;
     });
-    // Se o usuário tiver itens do tipo selecionado no Best, exibe eles; caso contrário, exibe os principais ativos da categoria
+
     if (filtered.length > 0) {
       items = filtered;
     } else {
-      const topCat = getActiveTickersForCategory('volume').slice(0, 8);
-      items = topCat.map(t => ({ ticker: t, name: getStockInfo(t).name || t }));
+      // Se não tiver no Best, tenta buscar da watchlist ou primeiros da categoria
+      const watchCat = (state.watchlist || []).filter(w => w.type === currentFilter);
+      if (watchCat.length > 0) {
+        items = watchCat.slice(0, 8).map(w => ({ ticker: w.ticker, name: w.name || w.ticker }));
+      } else if (typeof B3_STOCKS !== 'undefined' && Array.isArray(B3_STOCKS)) {
+        const b3Cat = B3_STOCKS.filter(s => s.type === currentFilter).slice(0, 8);
+        items = b3Cat.map(s => ({ ticker: s.ticker, name: s.name || s.ticker }));
+      }
     }
   }
 
   const marketOpen = isB3MarketOpen();
 
-  // Atualizar indicador de status do mercado no cabeçalho
+  // Atualizar indicador de status do mercado no cabeçalho de Favoritas
   const statusBadge = document.getElementById('market-status-badge');
   const statusText  = document.getElementById('market-status-text');
   if (statusBadge && statusText) {
     statusBadge.className = `market-status-badge ${marketOpen ? 'open' : 'closed'}`;
-    statusText.textContent = marketOpen ? 'Mercado Aberto • Tempo Real' : 'Mercado Fechado • Último Fechamento';
+    statusText.textContent = marketOpen ? 'Aberto' : 'Fechado';
     statusBadge.title = marketOpen
-      ? 'B3 em negociação ao vivo (10h às 18h)'
-      : 'B3 fechada. Exibindo o último valor de mercado registrado antes do fechamento.';
+      ? 'Mercado em negociação ao vivo'
+      : 'Mercado fechado. Exibindo último fechamento registrado.';
+  }
+
+  if (!items || items.length === 0) {
+    container.innerHTML = `
+      <div class="fav-empty">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        Nenhum ativo favorito nesta categoria. Clique em "Editar Favoritas" para adicionar.
+      </div>`;
+    return;
   }
 
   container.innerHTML = items.map(item => {
-    const q = getStockQuoteData(item.ticker);
-    const price = q.price != null ? fmtN(q.price) : '—';
-    const chg = q.change;
-    const chgClass = (chg > 0) ? 'pos' : (chg < 0) ? 'neg' : 'neutral';
-    const chgText = (chg != null) ? `${chg > 0 ? '+' : ''}${chg.toFixed(2)}%` : '—';
-    const isClosedVal = !marketOpen || q.isClosed;
+    const info  = getStockInfo(item.ticker);
+    const q     = getStockQuoteData(item.ticker);
+    const price = q?.price != null ? fmtN(q.price) : '—';
+    const chg   = q?.changePercent ?? q?.change ?? null;
+    const chgClass = chg == null ? 'neutral' : chg >= 0 ? 'ok' : 'over';
+    const chgText  = chg != null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '—';
+    const nameStr  = item.name || info.name || item.ticker;
 
     return `
-      <div class="best-card" onclick="openAssetDetail('${item.ticker}')" style="cursor:pointer;" title="Clique para ver gráfico TradingView e Preço Justo de ${escapeHtml(item.ticker)}">
-        <div class="best-card-top">
+      <div class="fav-list-card" onclick="openAssetDetail('${escapeAttr(item.ticker)}')" title="Clique para ver gráfico TradingView e Detalhes de ${escapeAttr(item.ticker)}">
+        <div class="fav-list-left">
           ${renderAssetLogoHtml(item.ticker, 'fav-logo')}
-          <div class="best-card-info">
-            <div class="best-ticker">${escapeHtml(item.ticker)}</div>
-            <div class="best-name" title="${escapeHtml(item.name || q.name || item.ticker)}">${escapeHtml(item.name || q.name || item.ticker)}</div>
+          <div class="fav-list-info">
+            <div class="fav-ticker">${escapeHtml(item.ticker)}</div>
+            <div class="fav-name" title="${escapeHtml(nameStr)}">${escapeHtml(nameStr)}</div>
           </div>
         </div>
-        <div class="best-price">${price}</div>
-        <div class="best-market-sub">
-          <span class="best-change ${chgClass}">${chgText}</span>
-          <span class="best-badge-status ${isClosedVal ? 'closed' : 'open'}">
-            ${isClosedVal ? 'Fechado' : 'Ao vivo'}
-          </span>
+        <div class="fav-list-right">
+          <div class="fav-price">${price}</div>
+          <div class="fav-margin ${chgClass}">${chgText}</div>
         </div>
       </div>
     `;
   }).join('');
-}
 
-function scrollBestList(offset) {
-  const el = document.getElementById('best-scroll');
-  if (!el) return;
-  el.scrollBy({ left: offset, behavior: 'smooth' });
-}
+  // Atualização em background das cotações da lista
+  const tickers = items.map(it => it.ticker);
+  QuoteService.getQuotes(tickers).then(quotes => {
+    tickers.forEach(t => {
+      const quote = quotes[t];
+      if (!quote?.price) return;
+      bestPrices[t] = quote;
 
-function enableScrollDrag(containerId) {
-  const container = document.getElementById(containerId);
-  if (!container || container._hasDragListener) return;
-  container._hasDragListener = true;
+      const card = container.querySelector(`.fav-list-card[onclick*="'${t}'"]`);
+      if (!card) return;
+      const priceEl = card.querySelector('.fav-price');
+      if (priceEl) priceEl.textContent = fmtN(quote.price);
 
-  container.addEventListener('wheel', (e) => {
-    if (e.deltaY !== 0) {
-      e.preventDefault();
-      container.scrollBy({ left: e.deltaY * 2, behavior: 'smooth' });
-    }
-  }, { passive: false });
-
-  let isDown = false;
-  let startX;
-  let scrollLeft;
-
-  container.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    isDown = true;
-    container.classList.add('grabbing');
-    startX = e.pageX - container.offsetLeft;
-    scrollLeft = container.scrollLeft;
-  });
-
-  window.addEventListener('mouseup', () => {
-    isDown = false;
-    container.classList.remove('grabbing');
-  });
-
-  container.addEventListener('mousemove', (e) => {
-    if (!isDown) return;
-    e.preventDefault();
-    const x = e.pageX - container.offsetLeft;
-    const walk = (x - startX) * 1.5;
-    container.scrollLeft = scrollLeft - walk;
+      const chgVal = quote.changePercent ?? quote.change ?? null;
+      const chgEl = card.querySelector('.fav-margin');
+      if (chgEl && chgVal != null) {
+        chgEl.className = `fav-margin ${chgVal >= 0 ? 'ok' : 'over'}`;
+        chgEl.textContent = `${chgVal >= 0 ? '+' : ''}${chgVal.toFixed(2)}%`;
+      }
+    });
   });
 }
 
@@ -2197,9 +2068,9 @@ async function refreshBestQuotes() {
     for (const [t, data] of Object.entries(quotes)) {
       if (data) bestPrices[t] = data;
     }
-    renderBestWidget();
+    renderFavoritosWidget();
   } catch (err) {
-    console.warn('Erro ao atualizar cotações Best:', err);
+    console.warn('Erro ao atualizar cotações de Favoritas:', err);
   }
 }
 
@@ -2221,12 +2092,9 @@ async function refreshAllQuotes() {
       }
     }
     renderAll();
-    renderBestWidget();
     renderFavoritosWidget();
-    renderVolumeWidget();
-    renderTopValueWidget();
 
-    // Sincronização em nuvem também!
+    // Sincronização em nuvem
     if (derivedKey) {
       await SyncService.checkBackgroundSync(true);
     }
@@ -2889,10 +2757,10 @@ function bestAddFromSearch() {
 function saveBestEdit() {
   state.best = [...bestEditList];
   saveEncryptedState();
-  renderBestWidget();
+  renderFavoritosWidget();
   refreshBestQuotes();
   closeModal('modal-best-edit');
-  showToast('Grupo Best atualizado com sucesso!', 'success');
+  showToast('Favoritas atualizadas com sucesso!', 'success');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -3305,10 +3173,7 @@ document.querySelectorAll('[data-category]').forEach(btn => {
     currentFilter = btn.dataset.category;
     renderPortfolio();
     renderWatchlist();
-    renderBestWidget();
     renderFavoritosWidget();
-    renderVolumeWidget();
-    renderTopValueWidget();
   });
 });
 
@@ -4343,10 +4208,7 @@ function renderAll() {
   renderSummary();
   renderPortfolio();
   renderWatchlist();
-  renderBestWidget();
   renderFavoritosWidget();
-  renderVolumeWidget();
-  renderTopValueWidget();
   renderMonthlyGoalProgress();
   renderHeroGoalsBadge();
   if (currentTab === 'goals') renderGoalsView();
@@ -4359,10 +4221,6 @@ function renderAll() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initLoginScreen();
-  enableScrollDrag('best-scroll');
-  enableScrollDrag('favoritos-scroll');
-  enableScrollDrag('volume-scroll');
-  enableScrollDrag('topvalue-scroll');
 
   // Service Worker
   if ('serviceWorker' in navigator) {

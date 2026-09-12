@@ -194,7 +194,10 @@
     <section id="summary-hero-card" class="summary-hero-card">
       <div class="summary-header-row">
         <span class="summary-label">Patrimônio Total</span>
-        <span class="summary-time">Sync: <span id="last-sync-time">—</span></span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+          <span class="summary-time">Sync: <span id="last-sync-time">—</span></span>
+          <span class="summary-time">Meta: <span id="summary-meta-target">R$ 1.000.000,00</span></span>
+        </div>
       </div>
       <div id="total-patrimonio" class="patrimonio-value">R$ 0,00</div>
       <div class="metrics-grid">
@@ -211,7 +214,7 @@
         </div>
       </div>
       <div class="allocation-container">
-        <div class="allocation-title">Alocação por categoria</div>
+        <div class="allocation-title">Alocação por Categoria &amp; Setor</div>
         <div id="allocation-bar" class="allocation-bar"></div>
         <div id="allocation-legend" class="alloc-legend"></div>
       </div>
@@ -255,82 +258,30 @@
          ══════════════════════════════════════════════════════════ -->
     <section id="view-carteira" class="view-section active">
 
-      <!-- Widget Best -->
-      <div class="widget-section" id="widget-best">
+      <!-- Seção: Favoritas (Lista Clean com Logos) -->
+      <div class="widget-section" id="widget-favoritas" style="margin-bottom:18px;">
         <div class="widget-header">
-          <div class="widget-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-              Best — Seleção Pessoal
-            </div>
-            <span id="market-status-badge" class="market-status-badge closed" title="Horário B3: Seg a Sex, 10h às 18h (Brasília)">
+          <div class="widget-title" style="display:flex;align-items:center;gap:6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent-yellow);"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            Favoritas
+            <span id="market-status-badge" class="market-status-badge closed" style="margin-left:6px;">
               <span class="status-dot"></span>
-              <span id="market-status-text">Mercado Fechado • Último Fechamento</span>
+              <span id="market-status-text">Fechado</span>
             </span>
           </div>
-          <div class="widget-actions" style="display:flex;align-items:center;gap:6px;">
-            <button class="btn-scroll-nav" onclick="scrollBestList(-280)" title="Rolar para a esquerda" aria-label="Rolar para esquerda">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-            </button>
-            <button class="btn-scroll-nav" onclick="scrollBestList(280)" title="Rolar para a direita" aria-label="Rolar para direita">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
+          <div style="display:flex;align-items:center;gap:6px;">
             <button class="btn-view-all" onclick="openBestEditModal()" style="color:var(--accent-yellow);border-color:rgba(227,179,65,.3);background:rgba(227,179,65,.08);">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Editar lista
+              Editar Favoritas
+            </button>
+            <button class="btn-view-all" onclick="switchTab('explorer')">
+              Explorer B3 →
             </button>
           </div>
         </div>
-        <div id="best-scroll" class="favoritos-scroll" title="Arraste ou use os botões para rolar a lista">
-          <!-- Renderizado via JS -->
+        <div id="favoritos-scroll" class="favoritas-list-grid">
+          <!-- Renderizado via JS como lista/cards com logo -->
         </div>
-      </div>
-
-      <!-- Widget de Favoritos (Radar Quick Access) -->
-      <div class="widget-section" id="widget-favoritos">
-        <div class="widget-header">
-          <div class="widget-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            Radar — Monitorando
-          </div>
-          <button class="btn-view-all" onclick="switchTab('explorer')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            Ver todos os ativos B3
-          </button>
-        </div>
-        <div id="favoritos-scroll" class="favoritos-scroll">
-          <!-- Renderizado via JS -->
-        </div>
-      </div>
-
-      <!-- Widget: Maior Volume de Mercado -->
-      <div class="widget-section" id="widget-volume">
-        <div class="widget-header">
-          <div class="widget-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-            Maior Volume — B3 Hoje
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button class="btn-scroll-nav" onclick="scrollWidget('volume-scroll',-280)" title="Rolar esquerda"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
-            <button class="btn-scroll-nav" onclick="scrollWidget('volume-scroll',280)" title="Rolar direita"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
-          </div>
-        </div>
-        <div id="volume-scroll" class="favoritos-scroll"><!-- JS --></div>
-      </div>
-
-      <!-- Widget: Maiores Valores de Mercado -->
-      <div class="widget-section" id="widget-topvalue">
-        <div class="widget-header">
-          <div class="widget-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Maiores Valores — Blue Chips
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button class="btn-scroll-nav" onclick="scrollWidget('topvalue-scroll',-280)" title="Rolar esquerda"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
-            <button class="btn-scroll-nav" onclick="scrollWidget('topvalue-scroll',280)" title="Rolar direita"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
-          </div>
-        </div>
-        <div id="topvalue-scroll" class="favoritos-scroll"><!-- JS --></div>
       </div>
 
       <!-- Lista de Ativos da Carteira -->
@@ -996,19 +947,19 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════
-     MODAL: EDITAR GRUPO BEST
+     MODAL: EDITAR FAVORITAS
      ══════════════════════════════════════════════════════════════════ -->
 <div id="modal-best-edit" class="modal-overlay">
   <div class="modal-card" style="max-width:500px;">
     <div class="modal-header">
-      <h3 class="modal-title">✦ Editar Grupo Best</h3>
+      <h3 class="modal-title">✦ Editar Favoritas</h3>
       <button class="modal-close-btn" onclick="closeModal('modal-best-edit')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <!-- Busca para adicionar -->
     <div class="form-group">
-      <label class="form-label">Adicionar ativo</label>
+      <label class="form-label">Adicionar ativo às Favoritas</label>
       <div style="display:flex;gap:8px;">
         <div class="search-input-wrapper" style="flex:1;">
           <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1022,9 +973,9 @@
       <!-- Sugestões de busca -->
       <div id="best-search-suggestions" style="margin-top:6px;display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;"></div>
     </div>
-    <!-- Lista atual do Best -->
+    <!-- Lista atual -->
     <div class="form-group">
-      <label class="form-label">Ativos no grupo Best</label>
+      <label class="form-label">Ativos em Favoritas</label>
       <div id="best-current-list" style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;"></div>
     </div>
     <div class="modal-footer">
