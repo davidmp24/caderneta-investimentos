@@ -632,15 +632,15 @@
 
       <!-- Filtros (compartilhados) -->
       <div class="mi-filters" id="mi-filters">
-        <select id="report-asset-select" class="form-select" onchange="renderReports()" style="font-size:0.8rem;flex:1;min-width:140px;max-width:200px;">
+        <select id="report-asset-select" class="form-select" onchange="onMiFilterChange()" style="font-size:0.8rem;flex:1;min-width:140px;max-width:200px;">
           <option value="ALL">Todos os Ativos</option>
         </select>
-        <select id="report-source" class="form-select" onchange="renderReports()" style="font-size:0.8rem;">
+        <select id="report-source" class="form-select" onchange="onMiFilterChange()" style="font-size:0.8rem;">
           <option value="all">Carteira + Favoritos</option>
           <option value="portfolio">Apenas Carteira</option>
           <option value="watchlist">Apenas Favoritos</option>
         </select>
-        <select id="report-type-filter" class="form-select" onchange="renderReports()" style="font-size:0.8rem;">
+        <select id="report-type-filter" class="form-select" onchange="onMiFilterChange()" style="font-size:0.8rem;">
           <option value="ALL">Todos os Tipos</option>
           <option value="STOCK">Ações</option>
           <option value="FII">FIIs</option>
@@ -648,7 +648,7 @@
           <option value="CRYPTO">Criptomoedas</option>
           <option value="FIXED">Renda Fixa</option>
         </select>
-        <select id="report-sort" class="form-select" onchange="renderReports()" style="font-size:0.8rem;">
+        <select id="report-sort" class="form-select" onchange="onMiFilterChange()" style="font-size:0.8rem;">
           <option value="ticker">Ticker A→Z</option>
           <option value="pl_pct">P&amp;L % ↓</option>
           <option value="pl_val">P&amp;L R$ ↓</option>
@@ -662,6 +662,9 @@
         <!-- Filtros extras do extrato -->
         <div class="mi-extrato-toolbar">
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select id="mi-extrato-asset-filter" class="form-select" onchange="renderMiExtrato()" style="font-size:0.8rem;width:auto;max-width:180px;">
+              <option value="ALL">Todos os Ativos</option>
+            </select>
             <input type="date" id="mi-filter-date-from" class="form-select" onchange="renderMiExtrato()" title="Data inicial" style="font-size:0.8rem;width:auto;">
             <span style="color:var(--text-muted);font-size:0.8rem;">até</span>
             <input type="date" id="mi-filter-date-to" class="form-select" onchange="renderMiExtrato()" title="Data final" style="font-size:0.8rem;width:auto;">

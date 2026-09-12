@@ -11,7 +11,7 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION        = '1.7.6';
+const APP_VERSION        = '1.7.7';
 const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
 const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
 const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
@@ -101,13 +101,13 @@ function renderAssetLogoHtml(ticker, cssClass = 'asset-logo') {
   const clean = (ticker || '').toUpperCase().trim();
   const initials = clean.replace(/[^A-Z0-9]/g, '').slice(0, 4) || clean.slice(0, 4);
   const url = getAssetLogoUrl(clean);
-  const fbClass = cssClass === 'explorer-logo' ? 'explorer-logo-fb' : cssClass === 'fav-logo' ? 'fav-logo-fb' : 'asset-logo-fallback';
+  const fbClass = cssClass === 'explorer-logo' ? 'explorer-logo-fb' : cssClass === 'fav-logo' ? 'fav-logo-fb' : cssClass === 'asset-logo-sm' ? 'asset-logo-sm-fb' : cssClass === 'table-asset-logo' ? 'table-asset-logo-fb' : 'asset-logo-fallback';
   const baseTicker = clean.replace(/\d+$/, '');
   const bgGradient = getTickerColorGradient(clean);
 
   return `
-    <div class="${cssClass}" title="${clean}" style="background:transparent;">
-      <img src="${url}" alt="${clean}" loading="lazy"
+    <div class="${cssClass}" title="${clean}">
+      <img src="${url}" alt="${clean}" loading="lazy" style="width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;display:block;border-radius:inherit;"
            onerror="
              const fallbackUrl = 'https://raw.githubusercontent.com/thefintz/icones-b3/main/icones/${baseTicker}.png';
              if (this.src !== fallbackUrl && !this.dataset.tried) {
@@ -118,7 +118,7 @@ function renderAssetLogoHtml(ticker, cssClass = 'asset-logo') {
                if (this.nextElementSibling) this.nextElementSibling.style.display = 'flex';
              }
            " />
-      <span class="${fbClass}" style="display:none;background:${bgGradient};color:#fff;font-weight:700;border-radius:inherit;width:100%;height:100%;align-items:center;justify-content:center;letter-spacing:-0.03em;">${initials}</span>
+      <span class="${fbClass}" style="display:none;background:${bgGradient};color:#fff;font-weight:700;border-radius:inherit;width:100%;height:100%;position:absolute;inset:0;align-items:center;justify-content:center;letter-spacing:-0.03em;">${initials}</span>
     </div>
   `;
 }
@@ -1464,6 +1464,21 @@ let currentMiTab     = 'extrato';  // 'extrato' | 'posicoes' | 'historico' | 'de
 let currentMiOpType  = 'ALL';      // 'ALL' | 'BUY' | 'SELL'
 let currentReportMode = 'summary'; // backward compat
 
+/* ── Handler de mudança nos filtros globais de Meus Investimentos ── */
+function onMiFilterChange() {
+  if (currentMiTab === 'historico') {
+    const assetFilter = document.getElementById('report-asset-select')?.value || 'ALL';
+    const typeFilter  = document.getElementById('report-type-filter')?.value || 'ALL';
+    renderReportsHistory(assetFilter, typeFilter);
+  } else if (currentMiTab === 'desempenho') {
+    renderMiDesempenho();
+  } else if (currentMiTab === 'extrato') {
+    renderMiExtrato();
+  } else {
+    renderReports();
+  }
+}
+
 /* ── Navegação por sub-abas ── */
 function switchMiTab(tab) {
   currentMiTab = tab;
@@ -1536,11 +1551,13 @@ function renderMiKpis() {
 
 /* ── Extrato cronológico de operações ── */
 function renderMiExtrato() {
+  updateReportAssetSelect();
   const feed = document.getElementById('mi-extrato-feed');
   if (!feed) return;
 
-  const dateFrom = document.getElementById('mi-filter-date-from')?.value || '';
-  const dateTo   = document.getElementById('mi-filter-date-to')?.value   || '';
+  const dateFrom    = document.getElementById('mi-filter-date-from')?.value || '';
+  const dateTo      = document.getElementById('mi-filter-date-to')?.value   || '';
+  const assetFilter = document.getElementById('mi-extrato-asset-filter')?.value || 'ALL';
 
   // Coleta todas as operações de todos os ativos
   let allOps = [];
@@ -1564,7 +1581,12 @@ function renderMiExtrato() {
     });
   });
 
-  // Filtros
+  // Filtro de ticker
+  if (assetFilter !== 'ALL') {
+    allOps = allOps.filter(op => op.ticker === assetFilter);
+  }
+
+  // Filtro de tipo de operação
   if (currentMiOpType !== 'ALL') {
     allOps = allOps.filter(op => (op.type || 'BUY') === currentMiOpType);
   }
@@ -1776,17 +1798,30 @@ function formatDatePtBr(dateStr) {
 
 function updateReportAssetSelect() {
   const select = document.getElementById('report-asset-select');
-  if (!select) return;
-  const currentVal = select.value || 'ALL';
-
+  const extratoSelect = document.getElementById('mi-extrato-asset-filter');
   const tickers = (state.portfolio || []).map(p => p.ticker);
-  let html = `<option value="ALL">Todas as Ações / Papéis</option>`;
-  tickers.forEach(t => {
-    const item = state.portfolio.find(p => p.ticker === t);
-    const label = `${t}${item?.name ? ' — ' + item.name : ''}`;
-    html += `<option value="${t}" ${t === currentVal ? 'selected' : ''}>${escapeHtml(label)}</option>`;
-  });
-  select.innerHTML = html;
+
+  if (select) {
+    const currentVal = select.value || 'ALL';
+    let html = `<option value="ALL">Todos os Ativos</option>`;
+    tickers.forEach(t => {
+      const item = state.portfolio.find(p => p.ticker === t);
+      const label = `${t}${item?.name ? ' — ' + item.name : ''}`;
+      html += `<option value="${t}" ${t === currentVal ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    });
+    select.innerHTML = html;
+  }
+
+  if (extratoSelect) {
+    const currentVal = extratoSelect.value || 'ALL';
+    let html = `<option value="ALL">Todos os Ativos</option>`;
+    tickers.forEach(t => {
+      const item = state.portfolio.find(p => p.ticker === t);
+      const label = `${t}${item?.name ? ' — ' + item.name : ''}`;
+      html += `<option value="${t}" ${t === currentVal ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    });
+    extratoSelect.innerHTML = html;
+  }
 }
 
 function renderReports() {
@@ -1797,8 +1832,8 @@ function renderReports() {
   const sortBy      = document.getElementById('report-sort')?.value || 'ticker';
   const assetFilter = document.getElementById('report-asset-select')?.value || 'ALL';
 
-  // Se o modo for Histórico / Extrato por Ação:
-  if (currentReportMode === 'history') {
+  // Se a aba for Histórico por Ativo:
+  if (currentMiTab === 'historico' || currentReportMode === 'history') {
     renderReportsHistory(assetFilter, typeFilter);
     return;
   }
@@ -1912,7 +1947,7 @@ function renderReports() {
       : '<span style="color:var(--text-muted)">—</span>';
     const srcBadge = `<span class="report-src-badge ${r.source === 'Carteira' ? 'carteira' : 'radar'}">${r.source}</span>`;
     return `<tr>
-      <td><div style="display:flex;align-items:center;gap:8px;">${renderAssetLogoHtml(r.ticker,'explorer-logo')}<div><strong style="cursor:pointer;" onclick="openAssetDetail('${r.ticker}')">${escapeHtml(r.ticker)}</strong><div style="font-size:0.7rem;color:var(--text-muted);">${escapeHtml(r.name)}</div></div>${srcBadge}</div></td>
+      <td><div style="display:flex;align-items:center;gap:8px;">${renderAssetLogoHtml(r.ticker,'table-asset-logo')}<div><strong style="cursor:pointer;" onclick="openAssetDetail('${r.ticker}')">${escapeHtml(r.ticker)}</strong><div style="font-size:0.7rem;color:var(--text-muted);">${escapeHtml(r.name)}</div></div>${srcBadge}</div></td>
       <td><span class="asset-category-badge cat-${(r.type||'').toLowerCase()}">${r.type}</span></td>
       <td class="num">${r.qty != null ? r.qty : '—'}</td>
       <td class="num">${r.avg != null ? fmtN(r.avg) : '—'}</td>
@@ -2170,22 +2205,7 @@ document.getElementById('operation-form')?.addEventListener('submit', function(e
   });
 
   // Recalcular saldo total e preço médio ponderado a partir de todas as transações
-  let totalQty = 0;
-  let totalInvested = 0;
-
-  asset.transactions.forEach(t => {
-    const tQty = parseFloat(t.quantity) || 0;
-    const tPrice = parseFloat(t.price) || 0;
-    if ((t.type || 'BUY') === 'BUY') {
-      totalInvested += (tQty * tPrice);
-      totalQty += tQty;
-    } else if (t.type === 'SELL') {
-      totalQty = Math.max(0, totalQty - tQty);
-    }
-  });
-
-  asset.quantity = totalQty;
-  asset.avgPrice = totalQty > 0 ? (totalInvested / totalQty) : price;
+  recalculateAssetPositions(asset);
   asset.date = date;
 
   saveEncryptedState();
@@ -2194,32 +2214,48 @@ document.getElementById('operation-form')?.addEventListener('submit', function(e
   showToast(`Operação de ${ticker} registrada com sucesso!`, 'success');
 });
 
+function recalculateAssetPositions(asset) {
+  if (!asset || !Array.isArray(asset.transactions) || asset.transactions.length === 0) return;
+
+  // Ordena cronologicamente crescente para processar a sequência real de aportes e vendas
+  const sorted = [...asset.transactions].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  let currentQty = 0;
+  let currentAvgPrice = 0;
+
+  sorted.forEach(t => {
+    const tQty = parseFloat(t.quantity) || 0;
+    const tPrice = parseFloat(t.price) || 0;
+    const isBuy = (t.type || 'BUY') === 'BUY';
+
+    if (isBuy) {
+      if (currentQty + tQty > 0) {
+        currentAvgPrice = ((currentQty * currentAvgPrice) + (tQty * tPrice)) / (currentQty + tQty);
+      } else {
+        currentAvgPrice = tPrice;
+      }
+      currentQty += tQty;
+    } else {
+      // VENDA: desconta as cotas vendidas. O preço médio de aquisição das cotas restantes NÃO é alterado.
+      currentQty = Math.max(0, currentQty - tQty);
+      if (currentQty === 0) {
+        currentAvgPrice = 0;
+      }
+    }
+  });
+
+  asset.quantity = currentQty;
+  asset.avgPrice = currentAvgPrice;
+}
+
 function deleteAssetTransaction(assetId, transId) {
   const asset = state.portfolio.find(p => p.id === assetId);
   if (!asset || !Array.isArray(asset.transactions)) return;
 
   asset.transactions = asset.transactions.filter(t => t.id !== transId);
 
-  // Recalcular
-  let totalQty = 0;
-  let totalInvested = 0;
-  asset.transactions.forEach(t => {
-    const tQty = parseFloat(t.quantity) || 0;
-    const tPrice = parseFloat(t.price) || 0;
-    if ((t.type || 'BUY') === 'BUY') {
-      totalInvested += (tQty * tPrice);
-      totalQty += tQty;
-    } else if (t.type === 'SELL') {
-      totalQty = Math.max(0, totalQty - tQty);
-    }
-  });
-
-  if (asset.transactions.length === 0) {
-    // Se não restou nenhuma transação, mantém a quantidade atual ou base
-  } else {
-    asset.quantity = totalQty;
-    asset.avgPrice = totalQty > 0 ? (totalInvested / totalQty) : asset.avgPrice;
-  }
+  // Recalcular posições
+  recalculateAssetPositions(asset);
 
   saveEncryptedState();
   renderAll();
@@ -4954,6 +4990,10 @@ function renderAll() {
   renderHeroGoalsBadge();
   if (currentTab === 'goals') renderGoalsView();
   if (currentTab === 'explorer') renderExplorerTable();
+  if (currentTab === 'reports') {
+    renderMiKpis();
+    switchMiTab(currentMiTab);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
