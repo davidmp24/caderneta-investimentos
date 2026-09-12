@@ -11,7 +11,7 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION        = '1.7.4';
+const APP_VERSION        = '1.7.5';
 const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
 const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
 const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
@@ -1457,18 +1457,71 @@ document.querySelectorAll('[data-tab]').forEach(btn => {
 });
 
 /* ═══════════════════════════════════════════════════════════
-   RELATÓRIOS
+   RELATÓRIOS & EXTRATO HISTÓRICO POR AÇÃO
    ═══════════════════════════════════════════════════════════ */
-function renderReports() {
-  const source     = document.getElementById('report-source')?.value || 'all';
-  const typeFilter = document.getElementById('report-type-filter')?.value || 'ALL';
-  const sortBy     = document.getElementById('report-sort')?.value || 'ticker';
 
-  // Montar lista unificada
+let currentReportMode = 'summary'; // 'summary' | 'history'
+
+function setReportMode(mode) {
+  currentReportMode = mode;
+  const btnSummary = document.getElementById('btn-rep-mode-summary');
+  const btnHistory = document.getElementById('btn-rep-mode-history');
+  const tableWrap  = document.getElementById('reports-table-wrapper');
+  const histWrap   = document.getElementById('reports-history-wrapper');
+
+  if (btnSummary) btnSummary.classList.toggle('active', mode === 'summary');
+  if (btnHistory) btnHistory.classList.toggle('active', mode === 'history');
+
+  if (tableWrap) tableWrap.style.display = mode === 'summary' ? 'block' : 'none';
+  if (histWrap)  histWrap.style.display  = mode === 'history' ? 'flex' : 'none';
+
+  renderReports();
+}
+
+function formatDatePtBr(dateStr) {
+  if (!dateStr) return '—';
+  if (dateStr.includes('-')) {
+    const [y, m, d] = dateStr.split('-');
+    if (y && m && d) return `${d}/${m}/${y}`;
+  }
+  return dateStr;
+}
+
+function updateReportAssetSelect() {
+  const select = document.getElementById('report-asset-select');
+  if (!select) return;
+  const currentVal = select.value || 'ALL';
+
+  const tickers = (state.portfolio || []).map(p => p.ticker);
+  let html = `<option value="ALL">Todas as Ações / Papéis</option>`;
+  tickers.forEach(t => {
+    const item = state.portfolio.find(p => p.ticker === t);
+    const label = `${t}${item?.name ? ' — ' + item.name : ''}`;
+    html += `<option value="${t}" ${t === currentVal ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+  });
+  select.innerHTML = html;
+}
+
+function renderReports() {
+  updateReportAssetSelect();
+
+  const source      = document.getElementById('report-source')?.value || 'all';
+  const typeFilter  = document.getElementById('report-type-filter')?.value || 'ALL';
+  const sortBy      = document.getElementById('report-sort')?.value || 'ticker';
+  const assetFilter = document.getElementById('report-asset-select')?.value || 'ALL';
+
+  // Se o modo for Histórico / Extrato por Ação:
+  if (currentReportMode === 'history') {
+    renderReportsHistory(assetFilter, typeFilter);
+    return;
+  }
+
+  // ── Modo 1: Visão Geral / Consolidado ──
   let rows = [];
 
   if (source !== 'watchlist') {
     state.portfolio.forEach(a => {
+      if (assetFilter !== 'ALL' && a.ticker !== assetFilter) return;
       const quote   = getStockQuoteData(a.ticker);
       const qty     = parseFloat(a.quantity) || 0;
       const avg     = parseFloat(a.avgPrice) || 0;
@@ -1480,26 +1533,31 @@ function renderReports() {
       const plVal   = totalCur - totalInv;
       const plPct   = totalInv > 0 ? (plVal / totalInv) * 100 : 0;
       rows.push({
+        id: a.id,
         ticker: a.ticker, name: a.name || '', type: a.type,
         qty, avg, cur, totalInv, totalCur, plVal, plPct,
         targetPrice: null, rank: null, notes: a.notes || '',
         source: 'Carteira',
+        date: a.date || null
       });
     });
   }
 
   if (source !== 'portfolio') {
     state.watchlist.forEach(a => {
+      if (assetFilter !== 'ALL' && a.ticker !== assetFilter) return;
       const quote = getStockQuoteData(a.ticker);
       const cur   = a.currentPrice != null && parseFloat(a.currentPrice) > 0
         ? parseFloat(a.currentPrice)
         : (quote?.price ?? null);
       rows.push({
+        id: a.id,
         ticker: a.ticker, name: a.name || '', type: a.type,
         qty: null, avg: null, cur, totalInv: null, totalCur: null, plVal: null, plPct: null,
         targetPrice: parseFloat(a.targetPrice) || null,
         rank: a.rank || null, notes: a.notes || '',
         source: 'Favoritos',
+        date: a.date || null
       });
     });
   }
@@ -1581,6 +1639,304 @@ function renderReports() {
       <td class="report-notes-cell" title="${escapeHtml(r.notes)}">${r.notes ? escapeHtml(r.notes.slice(0, 40)) + (r.notes.length > 40 ? '…' : '') : '<span style="color:var(--text-muted)">—</span>'}</td>
     </tr>`;
   }).join('');
+}
+
+// ── Modo 2: Extrato Detalhado com Datas de Aquisição por Ação ──
+function renderReportsHistory(assetFilter = 'ALL', typeFilter = 'ALL') {
+  const container = document.getElementById('reports-history-wrapper');
+  if (!container) return;
+
+  let assets = [...(state.portfolio || [])];
+  if (assetFilter !== 'ALL') assets = assets.filter(a => a.ticker === assetFilter);
+  if (typeFilter !== 'ALL')  assets = assets.filter(a => a.type === typeFilter);
+
+  if (assets.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state-box" style="padding:32px;">
+        <div class="empty-icon">📜</div>
+        <div class="empty-title">Nenhum papel encontrado</div>
+        <div class="empty-desc">Cadastre ativos na carteira ou lance novas operações com data para visualizar o extrato detalhado.</div>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = assets.map(a => {
+    const quote = getStockQuoteData(a.ticker);
+    const qty   = parseFloat(a.quantity) || 0;
+    const avg   = parseFloat(a.avgPrice) || 0;
+    const cur   = a.currentPrice != null && parseFloat(a.currentPrice) > 0 ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
+    const totalInv = qty * avg;
+    const totalCur = qty * cur;
+    const plVal = totalCur - totalInv;
+    const plPct = totalInv > 0 ? (plVal / totalInv) * 100 : 0;
+    const plClass = plVal >= 0 ? 'pos' : 'neg';
+
+    // Lista de transações históricas do papel
+    let transactions = Array.isArray(a.transactions) && a.transactions.length > 0
+      ? [...a.transactions]
+      : [{
+          id: 'initial',
+          date: a.date || '',
+          type: 'BUY',
+          quantity: qty,
+          price: avg,
+          total: totalInv,
+          notes: a.notes || 'Posição Inicial'
+        }];
+
+    // Ordenar transações por data decrescente (mais recentes primeiro)
+    transactions.sort((x, y) => (y.date || '').localeCompare(x.date || ''));
+
+    const rowsHtml = transactions.map((t, idx) => {
+      const isBuy = (t.type || 'BUY') === 'BUY';
+      const tQty = parseFloat(t.quantity) || 0;
+      const tPrice = parseFloat(t.price) || 0;
+      const tTotal = t.total != null ? parseFloat(t.total) : tQty * tPrice;
+      const dateFormatted = formatDatePtBr(t.date);
+
+      return `
+        <tr>
+          <td><strong style="color:var(--text-primary);">${dateFormatted}</strong></td>
+          <td>
+            <span class="history-badge ${isBuy ? 'buy' : 'sell'}">
+              ${isBuy ? '▲ Compra' : '▼ Venda'}
+            </span>
+          </td>
+          <td class="num"><strong>${tQty.toLocaleString('pt-BR')}</strong></td>
+          <td class="num">${fmtCurrency(tPrice)}</td>
+          <td class="num" style="font-weight:700;">${fmtCurrency(tTotal)}</td>
+          <td style="color:var(--text-muted);font-size:0.75rem;">${escapeHtml(t.notes || '—')}</td>
+          <td style="text-align:center;">
+            ${t.id !== 'initial' ? `
+              <button class="action-btn-sm delete" onclick="deleteAssetTransaction('${a.id}','${t.id}')" title="Excluir este aporte/operação">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            ` : '<span style="color:var(--text-muted);font-size:0.68rem;">Base</span>'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div class="history-asset-card">
+        <div class="history-asset-header">
+          <div class="history-asset-identity">
+            ${renderAssetLogoHtml(a.ticker, 'asset-logo')}
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <strong style="font-size:1.05rem;cursor:pointer;" onclick="openAssetDetail('${a.ticker}')">${escapeHtml(a.ticker)}</strong>
+                <span class="asset-category-badge cat-${(a.type||'').toLowerCase()}">${a.type}</span>
+              </div>
+              <div style="font-size:0.72rem;color:var(--text-muted);">${escapeHtml(a.name || a.ticker)}</div>
+            </div>
+          </div>
+
+          <div class="history-asset-metrics">
+            <div class="ham-item">
+              <span class="ham-label">Total em Carteira</span>
+              <span class="ham-val">${qty.toLocaleString('pt-BR')} cotas</span>
+            </div>
+            <div class="ham-item">
+              <span class="ham-label">Preço Médio</span>
+              <span class="ham-val">${fmtCurrency(avg)}</span>
+            </div>
+            <div class="ham-item">
+              <span class="ham-label">Total Investido</span>
+              <span class="ham-val">${fmtCurrency(totalInv)}</span>
+            </div>
+            <div class="ham-item">
+              <span class="ham-label">Cotação Atual</span>
+              <span class="ham-val">${fmtCurrency(cur)}</span>
+            </div>
+            <div class="ham-item">
+              <span class="ham-label">Resultado Total</span>
+              <span class="ham-val ${plClass}">${plVal >= 0 ? '+' : ''}${fmtCurrency(plVal)} (${plVal >= 0 ? '+' : ''}${plPct.toFixed(2)}%)</span>
+            </div>
+            <button class="btn-secondary" onclick="openAddOperationModal('${a.ticker}')" style="font-size:0.72rem;padding:4px 10px;margin-left:6px;">
+              + Aporte
+            </button>
+          </div>
+        </div>
+
+        <div class="history-table-container">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Data da Operação</th>
+                <th>Tipo</th>
+                <th class="num">Quantidade Adquirida</th>
+                <th class="num">Preço Unitário Pago</th>
+                <th class="num">Total da Operação</th>
+                <th>Notas / Motivo</th>
+                <th style="text-align:center;">Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Modal de Nova Operação / Aporte com Data ──
+function openAddOperationModal(prefillTicker = null) {
+  const select = document.getElementById('operation-asset-select');
+  if (!select) return;
+
+  const assets = state.portfolio || [];
+  if (assets.length === 0) {
+    showToast('Adicione ativos à carteira primeiro antes de registrar operações.', 'info');
+    openAddAssetModal();
+    return;
+  }
+
+  let html = '';
+  assets.forEach(a => {
+    const isSelected = prefillTicker && a.ticker === prefillTicker;
+    html += `<option value="${a.ticker}" ${isSelected ? 'selected' : ''}>${a.ticker} — ${escapeHtml(a.name || a.ticker)}</option>`;
+  });
+  select.innerHTML = html;
+
+  document.getElementById('operation-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('operation-type').value = 'BUY';
+  document.getElementById('operation-qty').value = '';
+  document.getElementById('operation-price').value = '';
+  document.getElementById('operation-notes').value = '';
+  document.getElementById('operation-total-val').textContent = 'R$ 0,00';
+
+  // Pré-carregar cotação atual se disponível
+  const selectedTicker = prefillTicker || assets[0]?.ticker;
+  if (selectedTicker) {
+    const q = getStockQuoteData(selectedTicker);
+    if (q?.price) document.getElementById('operation-price').value = q.price.toFixed(2);
+  }
+
+  calcOperationTotal();
+  openModal('modal-operation');
+}
+
+function onOperationAssetSelectChange() {
+  const ticker = document.getElementById('operation-asset-select').value;
+  if (!ticker) return;
+  const q = getStockQuoteData(ticker);
+  if (q?.price) {
+    document.getElementById('operation-price').value = q.price.toFixed(2);
+    calcOperationTotal();
+  }
+}
+
+function calcOperationTotal() {
+  const qty = parseFloat(document.getElementById('operation-qty')?.value) || 0;
+  const price = parseFloat(document.getElementById('operation-price')?.value) || 0;
+  const total = qty * price;
+  const el = document.getElementById('operation-total-val');
+  if (el) el.textContent = fmtCurrency(total);
+}
+
+document.getElementById('operation-form')?.addEventListener('submit', function(e) {
+  e.preventDefault();
+  const ticker = document.getElementById('operation-asset-select').value;
+  const date   = document.getElementById('operation-date').value;
+  const opType = document.getElementById('operation-type').value;
+  const qty    = parseFloat(document.getElementById('operation-qty').value);
+  const price  = parseFloat(document.getElementById('operation-price').value);
+  const notes  = document.getElementById('operation-notes').value.trim();
+
+  if (!ticker || !date || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
+    showToast('Preencha os campos obrigatórios corretamente.', 'error');
+    return;
+  }
+
+  const asset = state.portfolio.find(p => p.ticker === ticker);
+  if (!asset) {
+    showToast('Ativo não encontrado na carteira.', 'error');
+    return;
+  }
+
+  if (!Array.isArray(asset.transactions)) {
+    asset.transactions = [];
+    if (parseFloat(asset.quantity) > 0) {
+      asset.transactions.push({
+        id: genId(),
+        date: asset.date || date,
+        type: 'BUY',
+        quantity: parseFloat(asset.quantity),
+        price: parseFloat(asset.avgPrice) || price,
+        total: (parseFloat(asset.quantity) * (parseFloat(asset.avgPrice) || price)),
+        notes: asset.notes || 'Posição Inicial'
+      });
+    }
+  }
+
+  const transId = genId();
+  asset.transactions.push({
+    id: transId,
+    date,
+    type: opType,
+    quantity: qty,
+    price,
+    total: qty * price,
+    notes
+  });
+
+  // Recalcular saldo total e preço médio ponderado a partir de todas as transações
+  let totalQty = 0;
+  let totalInvested = 0;
+
+  asset.transactions.forEach(t => {
+    const tQty = parseFloat(t.quantity) || 0;
+    const tPrice = parseFloat(t.price) || 0;
+    if ((t.type || 'BUY') === 'BUY') {
+      totalInvested += (tQty * tPrice);
+      totalQty += tQty;
+    } else if (t.type === 'SELL') {
+      totalQty = Math.max(0, totalQty - tQty);
+    }
+  });
+
+  asset.quantity = totalQty;
+  asset.avgPrice = totalQty > 0 ? (totalInvested / totalQty) : price;
+  asset.date = date;
+
+  saveEncryptedState();
+  closeModal('modal-operation');
+  renderAll();
+  showToast(`Operação de ${ticker} registrada com sucesso!`, 'success');
+});
+
+function deleteAssetTransaction(assetId, transId) {
+  const asset = state.portfolio.find(p => p.id === assetId);
+  if (!asset || !Array.isArray(asset.transactions)) return;
+
+  asset.transactions = asset.transactions.filter(t => t.id !== transId);
+
+  // Recalcular
+  let totalQty = 0;
+  let totalInvested = 0;
+  asset.transactions.forEach(t => {
+    const tQty = parseFloat(t.quantity) || 0;
+    const tPrice = parseFloat(t.price) || 0;
+    if ((t.type || 'BUY') === 'BUY') {
+      totalInvested += (tQty * tPrice);
+      totalQty += tQty;
+    } else if (t.type === 'SELL') {
+      totalQty = Math.max(0, totalQty - tQty);
+    }
+  });
+
+  if (asset.transactions.length === 0) {
+    // Se não restou nenhuma transação, mantém a quantidade atual ou base
+  } else {
+    asset.quantity = totalQty;
+    asset.avgPrice = totalQty > 0 ? (totalInvested / totalQty) : asset.avgPrice;
+  }
+
+  saveEncryptedState();
+  renderAll();
+  showToast('Operação removida do extrato.', 'info');
 }
 
 // Auxiliar de formatação monetária
@@ -2662,19 +3018,42 @@ function detailActionCarteira() {
 function detailActionRadar() {
   if (!currentDetailTicker) return;
   const stockInfo = getStockInfo(currentDetailTicker);
-  const watchItem = state.watchlist.find(w => w.ticker === currentDetailTicker);
-  closeAssetDetail();
-  if (watchItem) {
-    openEditWatchlistModal(watchItem.id);
+  const watchIndex = state.watchlist.findIndex(w => w.ticker === currentDetailTicker);
+
+  if (watchIndex !== -1) {
+    // Se já estiver nos Favoritos, remove diretamente (1-clique toggle)
+    state.watchlist.splice(watchIndex, 1);
+    saveEncryptedState();
+    renderAll();
+    updateDetailUserPos(currentDetailTicker);
+    showToast(`${currentDetailTicker} removido dos Favoritos.`, 'info');
   } else {
-    // Pegar preço justo calculado para pré-preencher
+    // Se não estiver nos Favoritos, adiciona DIRETAMENTE sem abrir formulário e sem pedir dados
+    const quote = getStockQuoteData(currentDetailTicker);
+    const cur = (quote?.price != null) ? quote.price : null;
     let target = null;
     if (stockInfo.lpa && stockInfo.vpa && stockInfo.lpa > 0 && stockInfo.vpa > 0) {
       target = parseFloat((Math.sqrt(22.5 * stockInfo.lpa * stockInfo.vpa)).toFixed(2));
     } else if (stockInfo.targetPrice) {
       target = stockInfo.targetPrice;
     }
-    openAddWatchlistModal({ ticker: currentDetailTicker, name: stockInfo.name, type: stockInfo.type, targetPrice: target });
+
+    const item = {
+      id: genId(),
+      ticker: currentDetailTicker,
+      name: stockInfo.name || currentDetailTicker,
+      type: stockInfo.type || 'STOCK',
+      targetPrice: target,
+      currentPrice: cur,
+      rank: null,
+      notes: ''
+    };
+
+    state.watchlist.push(item);
+    saveEncryptedState();
+    renderAll();
+    updateDetailUserPos(currentDetailTicker);
+    showToast(`★ ${currentDetailTicker} adicionado aos Favoritos!`, 'success');
   }
 }
 
@@ -3064,6 +3443,8 @@ function openAddAssetModal(prefill = {}) {
   document.getElementById('asset-ticker').value   = prefill.ticker || '';
   document.getElementById('asset-name').value     = prefill.name   || '';
   document.getElementById('asset-type').value     = prefill.type   || 'STOCK';
+  document.getElementById('asset-date').value     = new Date().toISOString().split('T')[0];
+  document.getElementById('asset-op-type').value  = 'BUY';
   document.getElementById('asset-quantity').value = '';
   document.getElementById('asset-avg-price').value    = '';
   document.getElementById('asset-current-price').value = '';
@@ -3080,6 +3461,8 @@ function openEditAssetModal(id) {
   document.getElementById('asset-ticker').value   = a.ticker;
   document.getElementById('asset-name').value     = a.name || '';
   document.getElementById('asset-type').value     = a.type;
+  document.getElementById('asset-date').value     = a.date || new Date().toISOString().split('T')[0];
+  document.getElementById('asset-op-type').value  = 'BUY';
   document.getElementById('asset-quantity').value = a.quantity;
   document.getElementById('asset-avg-price').value    = a.avgPrice;
   document.getElementById('asset-current-price').value = a.currentPrice || '';
@@ -3093,6 +3476,8 @@ document.getElementById('asset-form').addEventListener('submit', async function(
   const ticker  = document.getElementById('asset-ticker').value.toUpperCase().trim();
   const name    = document.getElementById('asset-name').value.trim();
   const type    = document.getElementById('asset-type').value;
+  const date    = document.getElementById('asset-date').value || new Date().toISOString().split('T')[0];
+  const opType  = document.getElementById('asset-op-type').value || 'BUY';
   const qty     = parseFloat(document.getElementById('asset-quantity').value);
   const avg     = parseFloat(document.getElementById('asset-avg-price').value);
   const curRaw  = document.getElementById('asset-current-price').value;
@@ -3103,7 +3488,30 @@ document.getElementById('asset-form').addEventListener('submit', async function(
     showToast('Preencha todos os campos obrigatórios.', 'error'); return;
   }
 
-  const item = { id, ticker, name, type, quantity: qty, avgPrice: avg, currentPrice: cur, notes };
+  const existing = editingId ? state.portfolio.find(x => x.id === editingId) : null;
+  let transactions = existing && Array.isArray(existing.transactions) ? [...existing.transactions] : [];
+
+  if (!editingId || transactions.length === 0) {
+    transactions = [{
+      id: genId(),
+      date,
+      type: opType,
+      quantity: qty,
+      price: avg,
+      total: qty * avg,
+      notes
+    }];
+  }
+
+  const item = {
+    id, ticker, name, type,
+    quantity: qty,
+    avgPrice: avg,
+    currentPrice: cur,
+    notes,
+    date,
+    transactions
+  };
 
   if (editingId) {
     const idx = state.portfolio.findIndex(x => x.id === editingId);
@@ -3122,7 +3530,7 @@ document.getElementById('asset-form').addEventListener('submit', async function(
   saveEncryptedState();
   closeModal('modal-asset');
   renderAll();
-  showToast(editingId ? 'Ativo atualizado!' : 'Ativo adicionado!', 'success');
+  showToast(editingId ? 'Ativo atualizado!' : 'Ativo adicionado com sucesso!', 'success');
 });
 
 function deleteAsset(id) {
