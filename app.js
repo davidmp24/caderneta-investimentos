@@ -11,7 +11,7 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION        = '1.7.3';
+const APP_VERSION        = '1.7.4';
 const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
 const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
 const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
@@ -988,7 +988,7 @@ function deleteWatchlistItemWithUndo(id) {
   _undoData = { list: 'watchlist', item };
   state.watchlist = state.watchlist.filter(a => a.id !== id);
   saveEncryptedState(); renderAll();
-  showToastWithUndo(`${item.ticker} removido do Radar`, () => {
+  showToastWithUndo(`${item.ticker} removido dos Favoritos`, () => {
     if (_undoData && _undoData.list === 'watchlist') {
       state.watchlist.push(_undoData.item);
       _undoData = null;
@@ -1005,6 +1005,7 @@ function openApp() {
   startSessionTimer();
   renderAll();
   renderFavoritosWidget();
+  enableScrollDrag('favoritos-scroll');
   initExplorer();
   refreshAllQuotes();
   refreshBestQuotes();
@@ -1498,7 +1499,7 @@ function renderReports() {
         qty: null, avg: null, cur, totalInv: null, totalCur: null, plVal: null, plPct: null,
         targetPrice: parseFloat(a.targetPrice) || null,
         rank: a.rank || null, notes: a.notes || '',
-        source: 'Radar',
+        source: 'Favoritos',
       });
     });
   }
@@ -1546,7 +1547,7 @@ function renderReports() {
       <div class="report-summary-card">
         <div class="rsc-label">Ativos</div>
         <div class="rsc-value">${rows.length}</div>
-        <div class="rsc-sub">${portRows.length} carteira · ${rows.length - portRows.length} radar</div>
+        <div class="rsc-sub">${portRows.length} carteira · ${rows.length - portRows.length} favoritos</div>
       </div>`;
   }
 
@@ -1871,8 +1872,8 @@ function renderWatchlist() {
         <div class="empty-icon">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         </div>
-        <div class="empty-title">${currentFilter !== 'ALL' ? 'Nenhum ativo de ' + currentCatLabel + ' no Radar' : 'Radar vazio'}</div>
-        <div class="empty-desc">${currentFilter !== 'ALL' ? 'Monitore ativos de ' + currentCatLabel + ' clicando em "Novo Radar".' : 'Monitore ativos antes de aportar clicando em "Novo Radar".'}</div>
+        <div class="empty-title">${currentFilter !== 'ALL' ? 'Nenhum ativo de ' + currentCatLabel + ' nos Favoritos' : 'Favoritos vazio'}</div>
+        <div class="empty-desc">${currentFilter !== 'ALL' ? 'Adicione ativos de ' + currentCatLabel + ' clicando em "Novo Favorito".' : 'Adicione ativos favoritos para monitorar clicando em "Novo Favorito".'}</div>
       </div>`;
     return;
   }
@@ -2058,6 +2059,51 @@ function renderFavoritosWidget() {
       }
     });
   });
+
+  enableScrollDrag('favoritos-scroll');
+}
+
+function scrollFavoritos(offset) {
+  const el = document.getElementById('favoritos-scroll');
+  if (el) el.scrollBy({ left: offset, behavior: 'smooth' });
+}
+
+function enableScrollDrag(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container || container._hasDragListener) return;
+  container._hasDragListener = true;
+
+  container.addEventListener('wheel', (e) => {
+    if (e.deltaY !== 0) {
+      e.preventDefault();
+      container.scrollBy({ left: e.deltaY * 2, behavior: 'smooth' });
+    }
+  }, { passive: false });
+
+  let isDown = false;
+  let startX;
+  let scrollLeft;
+
+  container.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    isDown = true;
+    container.classList.add('grabbing');
+    startX = e.pageX - container.offsetLeft;
+    scrollLeft = container.scrollLeft;
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDown = false;
+    container.classList.remove('grabbing');
+  });
+
+  container.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    container.scrollLeft = scrollLeft - walk;
+  });
 }
 
 async function refreshBestQuotes() {
@@ -2070,7 +2116,7 @@ async function refreshBestQuotes() {
     }
     renderFavoritosWidget();
   } catch (err) {
-    console.warn('Erro ao atualizar cotações de Favoritas:', err);
+    console.warn('Erro ao atualizar cotações de Favoritos:', err);
   }
 }
 
@@ -2362,7 +2408,7 @@ function renderDetailValuation(ticker) {
         <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.75rem;" onclick="saveCustomTargetFromDetail()">Salvar</button>
       </div>
       <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-        O seu preço teto será salvo no Radar para alertar quando estiver em zona de oportunidade.
+        O seu preço teto será salvo nos Favoritos para alertar quando estiver em zona de oportunidade.
       </div>
     `;
   }
@@ -2522,7 +2568,7 @@ function updateDetailUserPosition(ticker) {
   const btnRadarText = document.getElementById('btn-detail-radar-text');
 
   if (btnPortText) btnPortText.textContent = portItem ? 'Editar na Carteira' : '+ Carteira';
-  if (btnRadarText) btnRadarText.textContent = watchItem ? 'Editar no Radar' : '☆ Radar';
+  if (btnRadarText) btnRadarText.textContent = watchItem ? 'Editar nos Favoritos' : '☆ Favoritos';
 
   if (!pill) return;
 
@@ -2533,7 +2579,7 @@ function updateDetailUserPosition(ticker) {
     pill.style.display = 'block';
   } else if (watchItem) {
     const teto = watchItem.targetPrice ? fmtN(watchItem.targetPrice) : 'Sem teto';
-    pill.innerHTML = `⭐ <strong>No Radar:</strong> Teto monitorado: ${teto}`;
+    pill.innerHTML = `⭐ <strong>Nos Favoritos:</strong> Teto monitorado: ${teto}`;
     pill.style.display = 'block';
   } else {
     pill.style.display = 'none';
@@ -2868,8 +2914,8 @@ function renderExplorerTable() {
       <td>
         <div class="explorer-actions">
           ${inWatchlist
-            ? `<span class="explorer-action-btn radar" style="opacity:.5;cursor:default;">★ Radar</span>`
-            : `<button class="explorer-action-btn radar" onclick="explorerAddToRadar('${s.ticker}','${escapeAttr(s.name)}','${s.type}')">☆ Radar</button>`
+            ? `<span class="explorer-action-btn radar" style="opacity:.5;cursor:default;">★ Favoritos</span>`
+            : `<button class="explorer-action-btn radar" onclick="explorerAddToRadar('${s.ticker}','${escapeAttr(s.name)}','${s.type}')">☆ Favoritos</button>`
           }
           ${inPortfolio
             ? `<span class="explorer-action-btn carteira" style="opacity:.5;cursor:default;">✓ Carteira</span>`
@@ -2915,7 +2961,7 @@ function explorerGoPage(n) {
   document.getElementById('view-explorer').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-/* Atalho: Adicionar ativo do Explorer ao Radar */
+/* Atalho: Adicionar ativo do Explorer aos Favoritos */
 function explorerAddToRadar(ticker, name, type) {
   const item = {
     id: genId(), ticker, name, type,
@@ -2926,7 +2972,7 @@ function explorerAddToRadar(ticker, name, type) {
   saveEncryptedState();
   renderFavoritosWidget();
   renderExplorerTable();
-  showToast(`${ticker} adicionado ao Radar!`, 'success');
+  showToast(`${ticker} adicionado aos Favoritos!`, 'success');
 }
 
 /* Atalho: Adicionar ativo do Explorer à Carteira (abre modal pré-preenchido) */
@@ -3089,7 +3135,7 @@ function deleteAsset(id) {
 
 function openAddWatchlistModal(prefill = {}) {
   editingId = null;
-  document.getElementById('modal-watchlist-title').textContent = 'Adicionar no Radar';
+  document.getElementById('modal-watchlist-title').textContent = 'Adicionar aos Favoritos';
   document.getElementById('watchlist-id').value = '';
   document.getElementById('watchlist-ticker').value       = prefill.ticker || '';
   document.getElementById('watchlist-name').value         = prefill.name   || '';
@@ -3105,7 +3151,7 @@ function openEditWatchlistModal(id) {
   const a = state.watchlist.find(x => x.id === id);
   if (!a) return;
   editingId = id;
-  document.getElementById('modal-watchlist-title').textContent = 'Editar Radar';
+  document.getElementById('modal-watchlist-title').textContent = 'Editar Favorito';
   document.getElementById('watchlist-id').value = id;
   document.getElementById('watchlist-ticker').value       = a.ticker;
   document.getElementById('watchlist-name').value         = a.name || '';
@@ -3148,7 +3194,7 @@ document.getElementById('watchlist-form').addEventListener('submit', async funct
   saveEncryptedState();
   closeModal('modal-watchlist');
   renderAll();
-  showToast(editingId ? 'Radar atualizado!' : 'Ativo adicionado ao Radar!', 'success');
+  showToast(editingId ? 'Favorito atualizado!' : 'Ativo adicionado aos Favoritos!', 'success');
 });
 
 function deleteWatchlistItem(id) {
@@ -4221,6 +4267,7 @@ function renderAll() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initLoginScreen();
+  enableScrollDrag('favoritos-scroll');
 
   // Service Worker
   if ('serviceWorker' in navigator) {

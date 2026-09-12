@@ -150,7 +150,7 @@
       </button>
       <button class="desktop-nav-item" data-tab="radar">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        Radar
+        Favoritos
       </button>
       <button class="desktop-nav-item" data-tab="explorer">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -258,29 +258,35 @@
          ══════════════════════════════════════════════════════════ -->
     <section id="view-carteira" class="view-section active">
 
-      <!-- Seção: Favoritas (Lista Clean com Logos) -->
+      <!-- Seção: Favoritos (Carrossel Responsivo Clean com Logos) -->
       <div class="widget-section" id="widget-favoritas" style="margin-bottom:18px;">
         <div class="widget-header">
           <div class="widget-title" style="display:flex;align-items:center;gap:6px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent-yellow);"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            Favoritas
+            Favoritos
             <span id="market-status-badge" class="market-status-badge closed" style="margin-left:6px;">
               <span class="status-dot"></span>
               <span id="market-status-text">Fechado</span>
             </span>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
+            <button class="btn-scroll-nav" onclick="scrollFavoritos(-220)" title="Rolar para esquerda">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button class="btn-scroll-nav" onclick="scrollFavoritos(220)" title="Rolar para direita">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
             <button class="btn-view-all" onclick="openBestEditModal()" style="color:var(--accent-yellow);border-color:rgba(227,179,65,.3);background:rgba(227,179,65,.08);">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Editar Favoritas
+              Editar
             </button>
             <button class="btn-view-all" onclick="switchTab('explorer')">
               Explorer B3 →
             </button>
           </div>
         </div>
-        <div id="favoritos-scroll" class="favoritas-list-grid">
-          <!-- Renderizado via JS como lista/cards com logo -->
+        <div id="favoritos-scroll" class="favoritas-carousel-scroll">
+          <!-- Renderizado via JS como lista/cards com swipe e scroll responsivo -->
         </div>
       </div>
 
@@ -296,14 +302,14 @@
     </section>
 
     <!-- ══════════════════════════════════════════════════════════
-         VIEW: RADAR / WATCHLIST
+         VIEW: FAVORITOS
          ══════════════════════════════════════════════════════════ -->
     <section id="view-radar" class="view-section">
       <div class="list-header">
-        <span class="list-title">Radar de Oportunidades (<span id="watchlist-count-badge">0</span>)</span>
+        <span class="list-title">Meus Favoritos (<span id="watchlist-count-badge">0</span>)</span>
         <button class="btn-primary btn-blue" onclick="openAddWatchlistModal()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Novo Radar
+          Novo Favorito
         </button>
       </div>
       <div id="watchlist-items-list" class="asset-list"></div>
@@ -553,9 +559,9 @@
         </h2>
         <div class="reports-filters">
           <select id="report-source" class="form-select" onchange="renderReports()" style="width:auto;font-size:0.8rem;">
-            <option value="all">Carteira + Radar</option>
+            <option value="all">Carteira + Favoritos</option>
             <option value="portfolio">Apenas Carteira</option>
-            <option value="watchlist">Apenas Radar</option>
+            <option value="watchlist">Apenas Favoritos</option>
           </select>
           <select id="report-type-filter" class="form-select" onchange="renderReports()" style="width:auto;font-size:0.8rem;">
             <option value="ALL">Todos os Tipos</option>
@@ -772,7 +778,7 @@
     </button>
     <button class="nav-item" data-tab="radar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      <span>Radar</span>
+      <span>Favoritos</span>
     </button>
     <button class="nav-item" data-tab="explorer">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -854,12 +860,12 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════
-     MODAL: RADAR / WATCHLIST
+     MODAL: FAVORITOS / WATCHLIST
      ══════════════════════════════════════════════════════════════════ -->
 <div id="modal-watchlist" class="modal-overlay">
   <div class="modal-card">
     <div class="modal-header">
-      <h3 id="modal-watchlist-title" class="modal-title">Adicionar no Radar</h3>
+      <h3 id="modal-watchlist-title" class="modal-title">Adicionar aos Favoritos</h3>
       <button class="modal-close-btn" onclick="closeModal('modal-watchlist')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -907,7 +913,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-secondary" onclick="closeModal('modal-watchlist')">Cancelar</button>
-        <button type="submit" class="btn-primary btn-blue">Salvar no Radar</button>
+        <button type="submit" class="btn-primary btn-blue">Salvar em Favoritos</button>
       </div>
     </form>
   </div>
@@ -1118,7 +1124,7 @@
         </button>
         <button id="btn-detail-add-radar" class="btn-detail-action radar" onclick="detailActionRadar()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          <span id="btn-detail-radar-text">☆ Radar</span>
+          <span id="btn-detail-radar-text">☆ Favoritos</span>
         </button>
         <button class="btn-detail-action secondary" onclick="copyAssetSummary()" title="Copiar Resumo">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
