@@ -157,8 +157,8 @@
         Explorer B3
       </button>
       <button class="desktop-nav-item" data-tab="reports">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-        Relatórios
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Meus Investimentos
       </button>
       <button class="desktop-nav-item" data-tab="goals">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
@@ -550,94 +550,199 @@
       </div>
     </section>
 
-    <!-- ══ RELATÓRIOS ══ -->
+    <!-- ══ MEUS INVESTIMENTOS ══ -->
     <section id="view-reports" class="view-section">
-      <div class="reports-header" style="flex-wrap:wrap;gap:12px;">
-        <div>
-          <h2 class="reports-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-            Relatório de Investimentos &amp; Extrato
-          </h2>
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">Consolidado da carteira e histórico completo das datas de compras por papel</div>
+
+      <!-- Cabeçalho Principal -->
+      <div class="mi-header">
+        <div class="mi-header-left">
+          <div class="mi-header-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <div>
+            <h2 class="mi-title">Meus Investimentos</h2>
+            <div class="mi-subtitle">Central de controle patrimonial · operações, posições e desempenho</div>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <button class="btn-primary" onclick="openAddOperationModal()" style="font-size:0.78rem;padding:6px 14px;">
+        <div class="mi-header-actions">
+          <button class="btn-primary" onclick="openAddOperationModal()" style="font-size:0.8rem;padding:7px 16px;gap:6px;">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            + Nova Operação
+            Nova Operação
           </button>
-          <button class="btn-secondary" onclick="exportPortfolioCSV()" title="Exportar carteira como CSV para Excel" style="white-space:nowrap;font-size:0.78rem;padding:6px 12px;">
+          <button class="btn-secondary" onclick="exportPortfolioCSV()" title="Exportar carteira como CSV" style="font-size:0.8rem;padding:7px 12px;">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Exportar CSV
+            CSV
           </button>
         </div>
       </div>
 
-      <!-- Barra de Modos de Exibição do Relatório -->
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-        <div class="filter-pills-row" style="margin-bottom:0;">
-          <button class="pill-btn active" id="btn-rep-mode-summary" onclick="setReportMode('summary')">📊 Visão Geral</button>
-          <button class="pill-btn" id="btn-rep-mode-history" onclick="setReportMode('history')">📜 Extrato por Ação &amp; Datas</button>
+      <!-- KPI Cards -->
+      <div class="mi-kpi-row" id="mi-kpi-row">
+        <div class="mi-kpi-card">
+          <div class="mi-kpi-icon mi-kpi-blue"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 6v6l4 2"/></svg></div>
+          <div class="mi-kpi-body">
+            <div class="mi-kpi-label">Total Investido</div>
+            <div class="mi-kpi-value" id="mi-kpi-invested">R$ 0,00</div>
+          </div>
         </div>
-
-        <div class="reports-filters" style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
-          <select id="report-asset-select" class="form-select" onchange="renderReports()" style="width:auto;font-size:0.8rem;max-width:180px;">
-            <option value="ALL">Todas as Ações / Papéis</option>
-            <!-- Preenchido dinamicamente via JS -->
-          </select>
-          <select id="report-source" class="form-select" onchange="renderReports()" style="width:auto;font-size:0.8rem;">
-            <option value="all">Carteira + Favoritos</option>
-            <option value="portfolio">Apenas Carteira</option>
-            <option value="watchlist">Apenas Favoritos</option>
-          </select>
-          <select id="report-type-filter" class="form-select" onchange="renderReports()" style="width:auto;font-size:0.8rem;">
-            <option value="ALL">Todos os Tipos</option>
-            <option value="STOCK">Ações</option>
-            <option value="FII">FIIs</option>
-            <option value="ETF">ETFs / BDRs</option>
-            <option value="CRYPTO">Criptomoedas</option>
-            <option value="FIXED">Renda Fixa</option>
-          </select>
-          <select id="report-sort" class="form-select" onchange="renderReports()" style="width:auto;font-size:0.8rem;">
-            <option value="ticker">Ticker A→Z</option>
-            <option value="pl_pct">P&amp;L % ↓</option>
-            <option value="pl_val">P&amp;L R$ ↓</option>
-            <option value="total">Total Investido ↓</option>
-            <option value="rank">Prioridade ↑</option>
-          </select>
+        <div class="mi-kpi-card">
+          <div class="mi-kpi-icon mi-kpi-green"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
+          <div class="mi-kpi-body">
+            <div class="mi-kpi-label">Valor Atual</div>
+            <div class="mi-kpi-value" id="mi-kpi-current">R$ 0,00</div>
+          </div>
+        </div>
+        <div class="mi-kpi-card">
+          <div class="mi-kpi-icon mi-kpi-yellow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 1 0 0 7h5a3.5 3.5 0 1 1 0 7H6"/></svg></div>
+          <div class="mi-kpi-body">
+            <div class="mi-kpi-label">Resultado (P&amp;L)</div>
+            <div class="mi-kpi-value" id="mi-kpi-pl">+ R$ 0,00</div>
+            <div class="mi-kpi-sub" id="mi-kpi-pl-pct">0,00%</div>
+          </div>
+        </div>
+        <div class="mi-kpi-card">
+          <div class="mi-kpi-icon mi-kpi-purple"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>
+          <div class="mi-kpi-body">
+            <div class="mi-kpi-label">Ativos na Carteira</div>
+            <div class="mi-kpi-value" id="mi-kpi-count">0</div>
+            <div class="mi-kpi-sub" id="mi-kpi-ops-count">0 operações</div>
+          </div>
         </div>
       </div>
 
-      <!-- Cards de resumo -->
-      <div class="reports-summary-row" id="reports-summary-row"></div>
-
-      <!-- Modo 1: Tabela Geral -->
-      <div class="reports-table-wrapper" id="reports-table-wrapper">
-        <table class="reports-table" id="reports-table">
-          <thead>
-            <tr>
-              <th>Ativo</th>
-              <th>Tipo</th>
-              <th class="num">Qtd</th>
-              <th class="num">Preço Médio</th>
-              <th class="num">Preço Atual</th>
-              <th class="num">Total Investido</th>
-              <th class="num">Valor Atual</th>
-              <th class="num">P&amp;L R$</th>
-              <th class="num">P&amp;L %</th>
-              <th class="num">Preço Teto</th>
-              <th>Prioridade</th>
-              <th>Notas</th>
-            </tr>
-          </thead>
-          <tbody id="reports-tbody"></tbody>
-        </table>
+      <!-- Sub-navegação das abas -->
+      <div class="mi-subnav" id="mi-subnav">
+        <button class="mi-subnav-btn active" data-mi-tab="extrato" onclick="switchMiTab('extrato')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Extrato
+        </button>
+        <button class="mi-subnav-btn" data-mi-tab="posicoes" onclick="switchMiTab('posicoes')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          Posições
+        </button>
+        <button class="mi-subnav-btn" data-mi-tab="historico" onclick="switchMiTab('historico')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Histórico por Ativo
+        </button>
+        <button class="mi-subnav-btn" data-mi-tab="desempenho" onclick="switchMiTab('desempenho')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Desempenho
+        </button>
       </div>
 
-      <!-- Modo 2: Extrato Detalhado por Ação com Histórico de Datas de Compra -->
-      <div id="reports-history-wrapper" style="display:none;flex-direction:column;gap:16px;">
-        <!-- Renderizado via JS -->
+      <!-- Filtros (compartilhados) -->
+      <div class="mi-filters" id="mi-filters">
+        <select id="report-asset-select" class="form-select" onchange="renderReports()" style="font-size:0.8rem;flex:1;min-width:140px;max-width:200px;">
+          <option value="ALL">Todos os Ativos</option>
+        </select>
+        <select id="report-source" class="form-select" onchange="renderReports()" style="font-size:0.8rem;">
+          <option value="all">Carteira + Favoritos</option>
+          <option value="portfolio">Apenas Carteira</option>
+          <option value="watchlist">Apenas Favoritos</option>
+        </select>
+        <select id="report-type-filter" class="form-select" onchange="renderReports()" style="font-size:0.8rem;">
+          <option value="ALL">Todos os Tipos</option>
+          <option value="STOCK">Ações</option>
+          <option value="FII">FIIs</option>
+          <option value="ETF">ETFs / BDRs</option>
+          <option value="CRYPTO">Criptomoedas</option>
+          <option value="FIXED">Renda Fixa</option>
+        </select>
+        <select id="report-sort" class="form-select" onchange="renderReports()" style="font-size:0.8rem;">
+          <option value="ticker">Ticker A→Z</option>
+          <option value="pl_pct">P&amp;L % ↓</option>
+          <option value="pl_val">P&amp;L R$ ↓</option>
+          <option value="total">Total Investido ↓</option>
+          <option value="rank">Prioridade ↑</option>
+        </select>
       </div>
+
+      <!-- ABA: Extrato de Operações -->
+      <div class="mi-tab-pane active" id="mi-pane-extrato">
+        <!-- Filtros extras do extrato -->
+        <div class="mi-extrato-toolbar">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input type="date" id="mi-filter-date-from" class="form-select" onchange="renderMiExtrato()" title="Data inicial" style="font-size:0.8rem;width:auto;">
+            <span style="color:var(--text-muted);font-size:0.8rem;">até</span>
+            <input type="date" id="mi-filter-date-to" class="form-select" onchange="renderMiExtrato()" title="Data final" style="font-size:0.8rem;width:auto;">
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="pill-btn active" id="mi-op-all" onclick="filterMiOpType('ALL')">Todas</button>
+            <button class="pill-btn" id="mi-op-buy" onclick="filterMiOpType('BUY')">Compras</button>
+            <button class="pill-btn" id="mi-op-sell" onclick="filterMiOpType('SELL')">Vendas</button>
+          </div>
+        </div>
+        <!-- Feed de operações -->
+        <div id="mi-extrato-feed" class="mi-feed-list"></div>
+      </div>
+
+      <!-- ABA: Posições Consolidadas -->
+      <div class="mi-tab-pane" id="mi-pane-posicoes" style="display:none;">
+        <!-- Cards de resumo legado -->
+        <div class="reports-summary-row" id="reports-summary-row"></div>
+        <!-- Tabela de posições -->
+        <div class="reports-table-wrapper" id="reports-table-wrapper">
+          <table class="reports-table" id="reports-table">
+            <thead>
+              <tr>
+                <th>Ativo</th>
+                <th>Tipo</th>
+                <th class="num">Qtd</th>
+                <th class="num">Preço Médio</th>
+                <th class="num">Preço Atual</th>
+                <th class="num">Total Investido</th>
+                <th class="num">Valor Atual</th>
+                <th class="num">P&amp;L R$</th>
+                <th class="num">P&amp;L %</th>
+                <th class="num">Preço Teto</th>
+                <th>Prioridade</th>
+                <th>Notas</th>
+              </tr>
+            </thead>
+            <tbody id="reports-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ABA: Histórico por Ativo -->
+      <div class="mi-tab-pane" id="mi-pane-historico" style="display:none;">
+        <div id="reports-history-wrapper" style="display:flex;flex-direction:column;gap:16px;">
+          <!-- Renderizado via JS -->
+        </div>
+      </div>
+
+      <!-- ABA: Desempenho -->
+      <div class="mi-tab-pane" id="mi-pane-desempenho" style="display:none;">
+        <div class="mi-perf-grid">
+          <!-- Card: Distribuição por Tipo -->
+          <div class="mi-perf-card">
+            <div class="mi-perf-card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+              Distribuição por Categoria
+            </div>
+            <div id="mi-perf-donut-legend" class="mi-donut-legend"></div>
+          </div>
+          <!-- Card: Top Ativos P&L -->
+          <div class="mi-perf-card">
+            <div class="mi-perf-card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg>
+              Melhores &amp; Piores Ativos
+            </div>
+            <div id="mi-perf-winners" class="mi-perf-bars"></div>
+          </div>
+          <!-- Card: Resumo Financeiro -->
+          <div class="mi-perf-card mi-perf-card-wide">
+            <div class="mi-perf-card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              Resumo Financeiro Detalhado
+            </div>
+            <div id="mi-perf-summary" class="mi-perf-summary-grid"></div>
+          </div>
+        </div>
+      </div>
+
     </section>
+
 
     <!-- ══════════════════════════════════════════════════════════
          VIEW: METAS & APOSENTADORIA (INTERATIVO & INCENTIVADOR)
@@ -812,8 +917,8 @@
       <span>Explorer</span>
     </button>
     <button class="nav-item" data-tab="reports">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-      <span>Relatórios</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span>Investimentos</span>
     </button>
     <button class="nav-item" data-tab="goals">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>

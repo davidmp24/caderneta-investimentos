@@ -11,7 +11,7 @@
 'use strict';
 
 /* ─── Constantes ──────────────────────────────────────────── */
-const APP_VERSION        = '1.7.5';
+const APP_VERSION        = '1.7.6';
 const STORAGE_KEY        = 'caderneta_v2_enc';    // Dados cifrados
 const AUTH_KEY           = 'caderneta_auth_meta'; // Metadados de auth (salt, hash)
 const SESSION_KEY        = 'caderneta_session';   // Sessão temporária
@@ -1443,7 +1443,7 @@ function switchTab(tab) {
   }
 
   if (tab === 'explorer') renderExplorerTable();
-  if (tab === 'reports')  renderReports();
+  if (tab === 'reports')  { renderMiKpis(); switchMiTab(currentMiTab); }
   if (tab === 'goals')    renderGoalsView();
   if (tab === 'carteira') {
     renderFavoritosWidget();
@@ -1457,26 +1457,313 @@ document.querySelectorAll('[data-tab]').forEach(btn => {
 });
 
 /* ═══════════════════════════════════════════════════════════
-   RELATÓRIOS & EXTRATO HISTÓRICO POR AÇÃO
+   MEUS INVESTIMENTOS — Central de Controle Patrimonial
    ═══════════════════════════════════════════════════════════ */
 
-let currentReportMode = 'summary'; // 'summary' | 'history'
+let currentMiTab     = 'extrato';  // 'extrato' | 'posicoes' | 'historico' | 'desempenho'
+let currentMiOpType  = 'ALL';      // 'ALL' | 'BUY' | 'SELL'
+let currentReportMode = 'summary'; // backward compat
 
+/* ── Navegação por sub-abas ── */
+function switchMiTab(tab) {
+  currentMiTab = tab;
+
+  // Atualiza botões
+  document.querySelectorAll('.mi-subnav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.miTab === tab);
+  });
+
+  // Oculta todos os painéis
+  ['extrato','posicoes','historico','desempenho'].forEach(id => {
+    const el = document.getElementById(`mi-pane-${id}`);
+    if (el) el.style.display = 'none';
+  });
+
+  // Exibe o painel ativo
+  const active = document.getElementById(`mi-pane-${tab}`);
+  if (active) active.style.display = 'block';
+
+  // Mostra/oculta filtros globais (ocultos no extrato que tem filtros próprios)
+  const filtersEl = document.getElementById('mi-filters');
+  if (filtersEl) filtersEl.style.display = tab === 'extrato' ? 'none' : 'flex';
+
+  // Renderiza o conteúdo correto
+  if (tab === 'extrato')     renderMiExtrato();
+  else if (tab === 'posicoes')   renderReports();
+  else if (tab === 'historico') {
+    const assetFilter = document.getElementById('report-asset-select')?.value || 'ALL';
+    const typeFilter  = document.getElementById('report-type-filter')?.value || 'ALL';
+    renderReportsHistory(assetFilter, typeFilter);
+  }
+  else if (tab === 'desempenho') renderMiDesempenho();
+
+  // Atualiza sempre os KPIs
+  renderMiKpis();
+}
+
+/* ── KPIs do cabeçalho ── */
+function renderMiKpis() {
+  const assets = state.portfolio || [];
+  let totalInv = 0, totalCur = 0, opsCount = 0;
+
+  assets.forEach(a => {
+    const quote = getStockQuoteData(a.ticker);
+    const qty   = parseFloat(a.quantity) || 0;
+    const avg   = parseFloat(a.avgPrice) || 0;
+    const cur   = a.currentPrice != null && parseFloat(a.currentPrice) > 0
+      ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
+    totalInv += qty * avg;
+    totalCur += qty * cur;
+    opsCount += Array.isArray(a.transactions) ? a.transactions.length : (qty > 0 ? 1 : 0);
+  });
+
+  const plVal = totalCur - totalInv;
+  const plPct = totalInv > 0 ? (plVal / totalInv) * 100 : 0;
+  const plClass = plVal >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const setStyle = (id, prop, val) => { const el = document.getElementById(id); if (el) el.style[prop] = val; };
+
+  set('mi-kpi-invested', fmtCurrency(totalInv));
+  set('mi-kpi-current',  fmtCurrency(totalCur));
+  set('mi-kpi-pl',       (plVal >= 0 ? '+ ' : '− ') + fmtCurrency(Math.abs(plVal)));
+  set('mi-kpi-pl-pct',   (plVal >= 0 ? '+' : '') + plPct.toFixed(2) + '%');
+  setStyle('mi-kpi-pl',     'color', plClass);
+  setStyle('mi-kpi-pl-pct', 'color', plClass);
+  set('mi-kpi-count',    assets.length + (assets.length === 1 ? ' ativo' : ' ativos'));
+  set('mi-kpi-ops-count', opsCount + (opsCount === 1 ? ' operação' : ' operações'));
+}
+
+/* ── Extrato cronológico de operações ── */
+function renderMiExtrato() {
+  const feed = document.getElementById('mi-extrato-feed');
+  if (!feed) return;
+
+  const dateFrom = document.getElementById('mi-filter-date-from')?.value || '';
+  const dateTo   = document.getElementById('mi-filter-date-to')?.value   || '';
+
+  // Coleta todas as operações de todos os ativos
+  let allOps = [];
+  (state.portfolio || []).forEach(a => {
+    const transactions = Array.isArray(a.transactions) && a.transactions.length > 0
+      ? a.transactions
+      : [{ id: 'initial', date: a.date || '', type: 'BUY',
+           quantity: parseFloat(a.quantity) || 0,
+           price: parseFloat(a.avgPrice) || 0,
+           total: (parseFloat(a.quantity) || 0) * (parseFloat(a.avgPrice) || 0),
+           notes: 'Posição inicial' }];
+
+    transactions.forEach(t => {
+      allOps.push({
+        ...t,
+        ticker: a.ticker,
+        assetName: a.name || a.ticker,
+        assetType: a.type,
+        assetId: a.id
+      });
+    });
+  });
+
+  // Filtros
+  if (currentMiOpType !== 'ALL') {
+    allOps = allOps.filter(op => (op.type || 'BUY') === currentMiOpType);
+  }
+  if (dateFrom) allOps = allOps.filter(op => op.date >= dateFrom);
+  if (dateTo)   allOps = allOps.filter(op => op.date <= dateTo);
+
+  // Ordena por data decrescente
+  allOps.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  if (allOps.length === 0) {
+    feed.innerHTML = `
+      <div class="empty-state-box" style="padding:40px 20px;text-align:center;">
+        <div style="font-size:2rem;margin-bottom:10px;">📋</div>
+        <div style="font-weight:600;color:var(--text-primary);margin-bottom:6px;">Nenhuma operação encontrada</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">Registre compras e vendas usando o botão "Nova Operação" acima.</div>
+      </div>`;
+    return;
+  }
+
+  // Agrupa por data
+  const grouped = {};
+  allOps.forEach(op => {
+    const key = op.date || '0000-00-00';
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(op);
+  });
+
+  let html = '';
+  Object.keys(grouped).sort((a, b) => b.localeCompare(a)).forEach(dateKey => {
+    const ops = grouped[dateKey];
+    html += `<div class="mi-feed-date-group">
+      <div class="mi-feed-date-label">${formatDatePtBr(dateKey) || 'Sem data'}</div>`;
+
+    ops.forEach(op => {
+      const isBuy  = (op.type || 'BUY') === 'BUY';
+      const tQty   = parseFloat(op.quantity) || 0;
+      const tPrice = parseFloat(op.price) || 0;
+      const tTotal = op.total != null ? parseFloat(op.total) : tQty * tPrice;
+
+      html += `
+      <div class="mi-feed-item">
+        <div class="mi-feed-item-left">
+          <div class="mi-feed-op-badge ${isBuy ? 'buy' : 'sell'}">${isBuy ? '▲' : '▼'}</div>
+          <div class="mi-feed-item-logo">${renderAssetLogoHtml(op.ticker, 'asset-logo-sm')}</div>
+          <div class="mi-feed-item-info">
+            <div class="mi-feed-item-ticker" onclick="openAssetDetail('${op.ticker}')">${escapeHtml(op.ticker)}</div>
+            <div class="mi-feed-item-sub">${escapeHtml(op.assetName)} · <span class="${isBuy ? 'text-buy' : 'text-sell'}">${isBuy ? 'Compra' : 'Venda'}</span></div>
+          </div>
+        </div>
+        <div class="mi-feed-item-right">
+          <div class="mi-feed-item-qty">${tQty.toLocaleString('pt-BR')} ${tQty === 1 ? 'cota' : 'cotas'} × ${fmtCurrency(tPrice)}</div>
+          <div class="mi-feed-item-total ${isBuy ? 'buy' : 'sell'}">${isBuy ? '−' : '+'} ${fmtCurrency(tTotal)}</div>
+        </div>
+      </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  feed.innerHTML = html;
+}
+
+/* ── Filtrar tipo de operação no extrato ── */
+function filterMiOpType(type) {
+  currentMiOpType = type;
+  document.getElementById('mi-op-all')?.classList.toggle('active',  type === 'ALL');
+  document.getElementById('mi-op-buy')?.classList.toggle('active',  type === 'BUY');
+  document.getElementById('mi-op-sell')?.classList.toggle('active', type === 'SELL');
+  renderMiExtrato();
+}
+
+/* ── Aba: Desempenho ── */
+function renderMiDesempenho() {
+  const assets = state.portfolio || [];
+
+  // 1. Distribuição por categoria (donut simples por legendas)
+  const catMap = {};
+  assets.forEach(a => {
+    const quote    = getStockQuoteData(a.ticker);
+    const qty      = parseFloat(a.quantity) || 0;
+    const avg      = parseFloat(a.avgPrice) || 0;
+    const cur      = a.currentPrice != null && parseFloat(a.currentPrice) > 0
+      ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
+    const val = qty * cur;
+    if (!catMap[a.type]) catMap[a.type] = 0;
+    catMap[a.type] += val;
+  });
+
+  const totalCur = Object.values(catMap).reduce((s, v) => s + v, 0);
+  const catColors = { STOCK:'#3fb950', FII:'#58a6ff', ETF:'#e3b341', CRYPTO:'#a371f7', FIXED:'#f78166', '':'#8b949e' };
+  const catLabels = { STOCK:'Ações', FII:'FIIs', ETF:'ETFs / BDRs', CRYPTO:'Criptomoedas', FIXED:'Renda Fixa' };
+
+  const donutEl = document.getElementById('mi-perf-donut-legend');
+  if (donutEl) {
+    if (Object.keys(catMap).length === 0) {
+      donutEl.innerHTML = `<div style="color:var(--text-muted);font-size:0.82rem;padding:16px;">Nenhum dado disponível.</div>`;
+    } else {
+      donutEl.innerHTML = Object.entries(catMap)
+        .sort((a, b) => b[1] - a[1])
+        .map(([cat, val]) => {
+          const pct  = totalCur > 0 ? (val / totalCur) * 100 : 0;
+          const color = catColors[cat] || '#8b949e';
+          const label = catLabels[cat] || cat;
+          return `
+          <div class="mi-donut-row">
+            <div class="mi-donut-color" style="background:${color};"></div>
+            <div class="mi-donut-label">${label}</div>
+            <div class="mi-donut-bar-wrap">
+              <div class="mi-donut-bar" style="width:${pct.toFixed(1)}%;background:${color};"></div>
+            </div>
+            <div class="mi-donut-pct">${pct.toFixed(1)}%</div>
+            <div class="mi-donut-val">${fmtCurrency(val)}</div>
+          </div>`;
+        }).join('');
+    }
+  }
+
+  // 2. Melhores e piores ativos por P&L %
+  const ranked = assets.map(a => {
+    const quote = getStockQuoteData(a.ticker);
+    const qty   = parseFloat(a.quantity) || 0;
+    const avg   = parseFloat(a.avgPrice) || 0;
+    const cur   = a.currentPrice != null && parseFloat(a.currentPrice) > 0
+      ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
+    const inv   = qty * avg;
+    const now   = qty * cur;
+    const plVal = now - inv;
+    const plPct = inv > 0 ? (plVal / inv) * 100 : 0;
+    return { ticker: a.ticker, plVal, plPct, inv };
+  }).filter(r => r.inv > 0);
+
+  ranked.sort((a, b) => b.plPct - a.plPct);
+
+  const winnersEl = document.getElementById('mi-perf-winners');
+  if (winnersEl) {
+    if (ranked.length === 0) {
+      winnersEl.innerHTML = `<div style="color:var(--text-muted);font-size:0.82rem;padding:16px;">Nenhum dado disponível.</div>`;
+    } else {
+      const display = [
+        ...ranked.slice(0, 3),
+        ...ranked.slice(-3).reverse()
+      ].filter((v, i, a) => a.findIndex(x => x.ticker === v.ticker) === i);
+
+      const maxAbs = Math.max(...display.map(r => Math.abs(r.plPct)), 1);
+      winnersEl.innerHTML = display.map((r, i) => {
+        const isPos = r.plPct >= 0;
+        const barW  = Math.abs(r.plPct) / maxAbs * 100;
+        const color = isPos ? 'var(--accent-green)' : 'var(--accent-red)';
+        return `
+        <div class="mi-bar-row">
+          <div class="mi-bar-ticker">${escapeHtml(r.ticker)}</div>
+          <div class="mi-bar-track">
+            <div class="mi-bar-fill" style="width:${barW}%;background:${color};"></div>
+          </div>
+          <div class="mi-bar-pct" style="color:${color};">${isPos ? '+' : ''}${r.plPct.toFixed(2)}%</div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // 3. Resumo Financeiro Detalhado
+  let totalInv = 0;
+  ranked.forEach(r => totalInv += r.inv);
+  const totalCurAll = ranked.reduce((s, r) => {
+    const a   = (state.portfolio || []).find(x => x.ticker === r.ticker);
+    const q   = getStockQuoteData(r.ticker);
+    const qty = parseFloat(a?.quantity) || 0;
+    const avg = parseFloat(a?.avgPrice) || 0;
+    const cur = a?.currentPrice != null && parseFloat(a.currentPrice) > 0
+      ? parseFloat(a.currentPrice) : (q?.price ?? avg);
+    return s + qty * cur;
+  }, 0);
+  const plTotalVal = totalCurAll - totalInv;
+  const plTotalPct = totalInv > 0 ? (plTotalVal / totalInv) * 100 : 0;
+  const positive = ranked.filter(r => r.plVal >= 0);
+  const negative = ranked.filter(r => r.plVal < 0);
+
+  const perfEl = document.getElementById('mi-perf-summary');
+  if (perfEl) {
+    perfEl.innerHTML = `
+      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Total Aportado</span><span class="mi-perf-stat-val">${fmtCurrency(totalInv)}</span></div>
+      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Patrimônio Atual</span><span class="mi-perf-stat-val">${fmtCurrency(totalCurAll)}</span></div>
+      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Resultado (P&L)</span><span class="mi-perf-stat-val ${plTotalVal >= 0 ? 'pos' : 'neg'}">${plTotalVal >= 0 ? '+' : ''}${fmtCurrency(plTotalVal)}</span></div>
+      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Rentabilidade Total</span><span class="mi-perf-stat-val ${plTotalVal >= 0 ? 'pos' : 'neg'}">${plTotalVal >= 0 ? '+' : ''}${plTotalPct.toFixed(2)}%</span></div>
+      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Ativos em Ganho</span><span class="mi-perf-stat-val pos">${positive.length} ativo${positive.length !== 1 ? 's' : ''}</span></div>
+      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Ativos em Perda</span><span class="mi-perf-stat-val neg">${negative.length} ativo${negative.length !== 1 ? 's' : ''}</span></div>
+      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Melhor Ativo</span><span class="mi-perf-stat-val pos">${ranked[0]?.ticker ?? '—'} ${ranked[0] ? '(+' + ranked[0].plPct.toFixed(2) + '%)' : ''}</span></div>
+      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Pior Ativo</span><span class="mi-perf-stat-val neg">${ranked[ranked.length-1]?.ticker ?? '—'} ${ranked[ranked.length-1]?.plPct < 0 ? '(' + ranked[ranked.length-1].plPct.toFixed(2) + '%)' : ''}</span></div>
+    `;
+  }
+}
+
+/* ── backward compat: setReportMode para a aba Posições ── */
 function setReportMode(mode) {
   currentReportMode = mode;
-  const btnSummary = document.getElementById('btn-rep-mode-summary');
-  const btnHistory = document.getElementById('btn-rep-mode-history');
-  const tableWrap  = document.getElementById('reports-table-wrapper');
-  const histWrap   = document.getElementById('reports-history-wrapper');
-
-  if (btnSummary) btnSummary.classList.toggle('active', mode === 'summary');
-  if (btnHistory) btnHistory.classList.toggle('active', mode === 'history');
-
-  if (tableWrap) tableWrap.style.display = mode === 'summary' ? 'block' : 'none';
-  if (histWrap)  histWrap.style.display  = mode === 'history' ? 'flex' : 'none';
-
   renderReports();
 }
+
+
 
 function formatDatePtBr(dateStr) {
   if (!dateStr) return '—';
