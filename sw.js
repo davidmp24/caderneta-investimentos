@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caderneta-v1.7.7';
+const CACHE_NAME = 'caderneta-v1.9.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -30,11 +30,18 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Dados locais: cache-first
+  // Dados locais: network-first com fallback offline
   if (url.origin === location.origin) {
     event.respondWith(
-      caches.match(event.request).then(cached => cached || fetch(event.request))
+      fetch(event.request)
+        .then(response => {
+          if (response && response.status === 200 && response.type === 'basic') {
+            const respClone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, respClone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
     );
   }
-  // APIs externas (Yahoo Finance, Binance): network-only
 });

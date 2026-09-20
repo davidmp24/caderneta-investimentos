@@ -190,75 +190,110 @@
   <!-- Main -->
   <main>
 
-    <!-- ── RESUMO PATRIMONIAL (sempre visível exceto config/explorer) ── -->
-    <section id="summary-hero-card" class="summary-hero-card">
+    <!-- ── PAINEL DE METAS E OBJETIVOS (TELA INICIAL - CLEAN / PADRÃO PROFISSIONAL) ── -->
+    <section id="summary-hero-card" class="summary-hero-card goals-hero-mode">
       <div class="summary-header-row">
-        <span class="summary-label">Patrimônio Total</span>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
-          <span class="summary-time">Sync: <span id="last-sync-time">—</span></span>
-          <span class="summary-time">Meta: <span id="summary-meta-target">R$ 1.000.000,00</span></span>
+        <div class="goals-hero-header-badge">
+          <span class="goals-hero-icon">🎯</span>
+          <span class="summary-label">Objetivo Global</span>
+          <span class="goals-status-pill" id="hero-overall-status">Em Evolução</span>
+        </div>
+        <div class="goals-hero-actions">
+          <button class="btn-hero-config" onclick="openModal('modal-goals-config')" title="Configurar metas mensais, anuais e de liberdade">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Ajustar Metas
+          </button>
         </div>
       </div>
-      <div id="total-patrimonio" class="patrimonio-value">R$ 0,00</div>
-      <div class="metrics-grid">
-        <div class="metric-item">
-          <span class="metric-sublabel">Total Investido</span>
-          <span id="total-investido" class="metric-subvalue">R$ 0,00</span>
+
+      <!-- Termômetro Principal: Liberdade Financeira (Longo Prazo) -->
+      <div class="hero-main-goal-box">
+        <div class="hmg-top">
+          <div class="hmg-title-group">
+            <span class="hmg-label">Independência &amp; Liberdade Financeira</span>
+            <span class="hmg-level-badge" id="hero-freedom-level-badge">🌱 Nível 1: Construindo a Base</span>
+          </div>
+          <div class="hmg-pct-group">
+            <span class="hmg-applied-pct" id="hero-freedom-pct">0,0%</span>
+            <span class="hmg-applied-label">conquistado</span>
+          </div>
         </div>
-        <div class="metric-item" style="align-items:flex-end;text-align:right;">
-          <span class="metric-sublabel">Resultado Total</span>
-          <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
-            <span id="total-lucro-nominal" class="metric-subvalue" style="font-size:.82rem;">R$ 0,00</span>
-            <span id="badge-rentabilidade-total" class="badge-profit neutral">0,00%</span>
+
+        <div class="hero-progress-track">
+          <div class="hero-progress-bar" id="hero-freedom-bar" style="width: 0%;"></div>
+        </div>
+
+        <div class="hmg-footer">
+          <span class="hmg-missing-text" id="hero-freedom-missing">Faltam <strong id="hero-freedom-missing-num">100,0%</strong> para a Liberdade</span>
+          <span class="hmg-sync-time">Sync: <span id="last-sync-time">—</span></span>
+        </div>
+      </div>
+
+      <!-- Metas Mensais & Anuais Compactas (Estilo Clean Chips) -->
+      <div class="hero-goals-compact-row">
+        <!-- Chip Meta Mensal -->
+        <div class="hero-goal-compact-chip">
+          <div class="hgc-header">
+            <span class="hgc-label">📅 Meta Mês (<span id="hero-month-name">Setembro</span>)</span>
+            <span class="hgc-pct" id="hero-month-pct">0%</span>
+          </div>
+          <div class="hgc-track">
+            <div class="hgc-fill monthly" id="hero-month-bar" style="width: 0%;"></div>
+          </div>
+          <div class="hgc-footer">
+            <span id="hero-month-missing-pct">Faltam 100%</span>
+            <span class="hgc-desc" id="hero-month-desc">Aporte no ritmo</span>
+          </div>
+        </div>
+
+        <!-- Chip Meta Anual -->
+        <div class="hero-goal-compact-chip">
+          <div class="hgc-header">
+            <span class="hgc-label">🏆 Meta Ano (<span id="hero-year-name">2026</span>)</span>
+            <span class="hgc-pct" id="hero-year-pct">0%</span>
+          </div>
+          <div class="hgc-track">
+            <div class="hgc-fill annual" id="hero-year-bar" style="width: 0%;"></div>
+          </div>
+          <div class="hgc-footer">
+            <span id="hero-year-missing-pct">Faltam 100%</span>
+            <span class="hgc-desc" id="hero-year-desc">Acúmulo anual</span>
           </div>
         </div>
       </div>
+
+      <!-- Alocação por Categoria & Setor (% Apenas) -->
       <div class="allocation-container">
-        <div class="allocation-title">Alocação por Categoria &amp; Setor</div>
+        <div class="allocation-title" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Distribuição da Carteira (% por Ativos/Setores)</span>
+          <span style="font-size:0.68rem;color:var(--text-muted);">Equilíbrio de Classes</span>
+        </div>
         <div id="allocation-bar" class="allocation-bar"></div>
         <div id="allocation-legend" class="alloc-legend"></div>
       </div>
-      <!-- Meta de Aporte Mensal (renderizada via JS quando configurada) -->
-      <div id="monthly-goal-progress" style="display:none;margin-top:12px;padding-top:10px;border-top:1px solid var(--border-subtle);"></div>
 
-      <!-- Mini Card / Atalho Interativo: Liberdade Financeira & Metas -->
-      <div id="hero-goals-badge" class="hero-goals-badge" onclick="switchTab('goals')" title="Clique para ver sua evolução e metas de aposentadoria">
+      <!-- Atalho para Módulo de Metas & Simulador -->
+      <div id="hero-goals-badge" class="hero-goals-badge" onclick="switchTab('goals')" title="Clique para ver o simulador e metas detalhadas">
         <div class="hgb-left">
-          <div class="hgb-icon">🎯</div>
+          <div class="hgb-icon">📈</div>
           <div>
-            <div class="hgb-title">Liberdade Financeira <span id="hgb-pct" class="hgb-pct">0%</span></div>
-            <div class="hgb-desc" id="hgb-desc">Carregando metas…</div>
+            <div class="hgb-title">Simulador &amp; Detalhes da Liberdade Financeira <span id="hgb-pct" class="hgb-pct">0%</span></div>
+            <div class="hgb-desc" id="hgb-desc">Ver projeções de juros compostos e alvos</div>
           </div>
         </div>
         <div class="hgb-right">
-          <span class="hgb-cta">Ver Metas</span>
+          <span class="hgb-cta">Abrir Simulador</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
         </div>
       </div>
     </section>
 
-    <!-- ── BUSCA & FILTROS ── -->
-    <section id="toolbar-section" class="toolbar-section">
-      <div class="search-input-wrapper">
-        <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="search" id="search-assets" class="search-input" placeholder="Buscar ticker ou nome… (pressione /)" enterkeyhint="search">
-      </div>
-      <div class="filter-pills-row">
-        <button class="pill-btn active" data-category="ALL">Todos</button>
-        <button class="pill-btn" data-category="STOCK">Ações</button>
-        <button class="pill-btn" data-category="FII">FIIs</button>
-        <button class="pill-btn" data-category="ETF">ETFs / BDRs</button>
-        <button class="pill-btn" data-category="CRYPTO">Cripto</button>
-        <button class="pill-btn" data-category="FIXED">Renda Fixa</button>
-      </div>
-    </section>
-
     <!-- ══════════════════════════════════════════════════════════
-         VIEW: CARTEIRA
+         VIEW: CARTEIRA (TELA INICIAL)
          ══════════════════════════════════════════════════════════ -->
     <section id="view-carteira" class="view-section active">
 
-      <!-- Seção: Favoritos (Carrossel Responsivo Clean com Logos) -->
+      <!-- Seção: Favoritos (Visual em 2 Colunas no Smartphone) -->
       <div class="widget-section" id="widget-favoritas" style="margin-bottom:18px;">
         <div class="widget-header">
           <div class="widget-title" style="display:flex;align-items:center;gap:6px;">
@@ -286,19 +321,122 @@
           </div>
         </div>
         <div id="favoritos-scroll" class="favoritas-carousel-scroll">
-          <!-- Renderizado via JS como lista/cards com swipe e scroll responsivo -->
+          <!-- Renderizado via JS com suporte a grid 2 colunas no smartphone -->
         </div>
       </div>
 
-      <!-- Lista de Ativos da Carteira -->
-      <div class="list-header">
-        <span class="list-title">Meus Ativos (<span id="portfolio-count-badge">0</span>)</span>
-        <button class="btn-primary" onclick="openAddAssetModal()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Novo Ativo
-        </button>
+      <!-- ── MONITORAMENTO & TENDÊNCIA DOS INVESTIMENTOS ── -->
+      <div class="widget-section" id="widget-investment-trend">
+        <div class="widget-header">
+          <div class="widget-title" style="display:flex;align-items:center;gap:7px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="color:var(--accent-green);"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            Monitoramento &amp; Tendência
+            <span id="trend-status-badge" class="trend-status-badge positive">▲ Tendência Positiva</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="btn-primary btn-sm" onclick="openAddAssetModal()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Novo Investimento
+            </button>
+            <button class="btn-view-all" onclick="switchTab('reports')">
+              Extrato &amp; Histórico →
+            </button>
+          </div>
+        </div>
+
+        <!-- Card do Gráfico de Tendência -->
+        <div class="trend-card-wrapper">
+          <!-- Badges de Todos os Ativos no Gráfico -->
+          <div class="trend-asset-filter-bar">
+            <span class="taf-label">Ativos Monitorados Simultaneamente:</span>
+            <div id="trend-asset-pills" class="trend-asset-pills">
+              <!-- Renderizado dinamicamente via JS com todos os ativos e suas respectivas cores -->
+            </div>
+          </div>
+
+          <!-- Métricas de Tendência -->
+          <div class="trend-metrics-row">
+            <div class="trend-metric-pill">
+              <span class="tmp-label" id="trend-profit-label">Rendimento Consolidado</span>
+              <span class="tmp-value" id="trend-profit-val">+0,00%</span>
+            </div>
+            <div class="trend-metric-pill">
+              <span class="tmp-label">Maior Alta / Destaque</span>
+              <span class="tmp-value" id="trend-direction-val">—</span>
+            </div>
+            <div class="trend-metric-pill">
+              <span class="tmp-label" id="trend-velocity-label">Performance dos Ativos</span>
+              <span class="tmp-value" id="trend-velocity-val">Todos os Ativos</span>
+            </div>
+          </div>
+
+          <!-- Canvas do Gráfico -->
+          <div class="trend-canvas-container" id="trend-canvas-container">
+            <canvas id="investmentTrendCanvas"></canvas>
+            <div id="trend-tooltip" class="trend-chart-tooltip" style="display:none;"></div>
+          </div>
+
+          <!-- Legendas do Gráfico -->
+          <div class="trend-chart-legends">
+            <div class="trend-legend-item">
+              <span class="trend-dot invested"></span>
+              <span id="legend-invested-label">Aportes Realizados</span>
+            </div>
+            <div class="trend-legend-item">
+              <span class="trend-dot value"></span>
+              <span id="legend-value-label">Evolução da Carteira (com Cotações)</span>
+            </div>
+            <div class="trend-legend-item">
+              <span class="trend-dot projected"></span>
+              <span>Tendência Projetada</span>
+            </div>
+          </div>
+
+          <!-- Mini Resumo de Evolução dos Ativos Cadastrados -->
+          <div class="trend-assets-breakdown" id="trend-assets-breakdown">
+            <div class="tab-title-row">
+              <span class="tab-title">Evolução dos Ativos Cadastrados</span>
+              <span class="tab-subtitle" id="tab-assets-count">0 ativos monitorados</span>
+            </div>
+            <div class="tab-grid" id="trend-assets-grid">
+              <!-- Renderizado via JS com cada ativo, cotação e tendência -->
+            </div>
+          </div>
+        </div>
       </div>
-      <div id="portfolio-items-list" class="asset-list"></div>
+
+      <!-- ── CALENDÁRIO ECONÔMICO GLOBAL ── -->
+      <div class="widget-section" id="widget-economic-calendar" style="margin-top:22px;margin-bottom:24px;">
+        <div class="widget-header">
+          <div class="widget-title" style="display:flex;align-items:center;gap:7px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="color:var(--accent-yellow);"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Calendário Econômico Global
+            <span class="market-status-badge open" style="margin-left:4px;">
+              <span class="status-dot"></span>
+              <span>Ao Vivo</span>
+            </span>
+          </div>
+          <div class="econ-nav-tabs">
+            <button class="econ-tab-btn active" data-econtab="weekly" onclick="switchEconCalendarTab('weekly')">📅 Semanal</button>
+            <button class="econ-tab-btn" data-econtab="monthly" onclick="switchEconCalendarTab('monthly')">🗓️ Mensal</button>
+            <button class="econ-tab-btn" data-econtab="tradingview" onclick="switchEconCalendarTab('tradingview')">🌐 TradingView</button>
+          </div>
+        </div>
+
+        <div class="econ-calendar-card">
+          <!-- Lista de Eventos Macroeconômicos (Semanal / Mensal) -->
+          <div id="econ-events-list-container" class="econ-events-list">
+            <!-- Renderizado via JS -->
+          </div>
+
+          <!-- Embed do TradingView Economic Calendar (opcional quando selecionado) -->
+          <div id="econ-tradingview-container" class="econ-tradingview-container" style="display:none;">
+            <div class="tradingview-widget-container">
+              <div class="tradingview-widget-container__widget"></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- ══════════════════════════════════════════════════════════
@@ -1022,9 +1160,24 @@
       <div class="form-group">
         <label class="form-label">Ativo / Papel *</label>
         <select id="operation-asset-select" class="form-select" required onchange="onOperationAssetSelectChange()">
-          <!-- Preenchido via JS -->
+          <!-- Preenchido via JS: Ativos da carteira + Opção 'Outros' -->
         </select>
       </div>
+
+      <!-- Campo de busca manual com sugestão inteligente quando selecionado 'Outros' -->
+      <div class="form-group" id="operation-custom-group" style="display:none;position:relative;">
+        <label class="form-label" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Digitar / Buscar Ativo *</span>
+          <span style="font-size:0.68rem;color:var(--accent-blue);font-weight:600;">✨ Sugestões ao digitar</span>
+        </label>
+        <div style="position:relative;">
+          <input type="text" id="operation-custom-ticker" class="form-input" placeholder="Digite as iniciais ou ticker (Ex: PETR4, VALE3, MXRF11, CDB…)" autocomplete="off" oninput="onOperationCustomTickerInput(event)">
+          <div id="operation-ticker-suggestions" class="op-suggestions-container" style="display:none;"></div>
+        </div>
+        <input type="hidden" id="operation-custom-name">
+        <input type="hidden" id="operation-custom-type" value="STOCK">
+      </div>
+
       <div class="form-row-2">
         <div class="form-group">
           <label class="form-label">Data da Operação *</label>
@@ -1458,8 +1611,21 @@
       </button>
     </div>
     <form id="goals-config-form" onsubmit="handleSaveGoalsConfig(event)">
+      <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label class="form-label" for="cfg-monthly-invest-goal">Meta de Aporte Mensal (R$)</label>
+          <input type="number" id="cfg-monthly-invest-goal" class="form-input" placeholder="Ex: 1000" min="50" step="50">
+          <span style="font-size:0.68rem;color:var(--text-muted);">Quanto planeja aportar a cada mês.</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cfg-annual-invest-goal">Meta de Aporte Anual (R$)</label>
+          <input type="number" id="cfg-annual-invest-goal" class="form-input" placeholder="Ex: 12000" min="500" step="500">
+          <span style="font-size:0.68rem;color:var(--text-muted);">Total planejado no ano (padrão: 12x mês).</span>
+        </div>
+      </div>
+
       <div class="form-group">
-        <label class="form-label" for="cfg-retirement-goal">Meta de Patrimônio da Aposentadoria (R$)</label>
+        <label class="form-label" for="cfg-retirement-goal">Meta de Patrimônio da Aposentadoria / Liberdade (R$)</label>
         <input type="number" id="cfg-retirement-goal" class="form-input" placeholder="Ex: 1000000" min="1000" step="1000" required>
         <span style="font-size:0.7rem;color:var(--text-muted);">O montante total que você deseja acumular para ter independência financeira plena.</span>
       </div>

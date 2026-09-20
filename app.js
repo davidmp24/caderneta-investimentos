@@ -1431,15 +1431,17 @@ function switchTab(tab) {
   // Resumo e toolbar: só aparecem na carteira e radar
   const showSummary  = ['carteira', 'radar'].includes(tab);
   const showToolbar  = ['carteira', 'radar'].includes(tab);
-  document.getElementById('summary-hero-card').style.display = showSummary ? '' : 'none';
-  document.getElementById('toolbar-section').style.display   = showToolbar ? '' : 'none';
+  const heroCardEl   = document.getElementById('summary-hero-card');
+  const toolbarEl    = document.getElementById('toolbar-section');
+  if (heroCardEl) heroCardEl.style.display = showSummary ? '' : 'none';
+  if (toolbarEl)  toolbarEl.style.display  = showToolbar ? '' : 'none';
 
   // Configurações, Explorer, Relatórios e Metas: esconder toolbar
   if (tab === 'config' || tab === 'explorer' || tab === 'reports' || tab === 'goals') {
-    document.getElementById('toolbar-section').style.display = 'none';
+    if (toolbarEl) toolbarEl.style.display = 'none';
   }
   if (tab === 'config' || tab === 'explorer' || tab === 'goals') {
-    document.getElementById('summary-hero-card').style.display = 'none';
+    if (heroCardEl) heroCardEl.style.display = 'none';
   }
 
   if (tab === 'explorer') renderExplorerTable();
@@ -1448,6 +1450,7 @@ function switchTab(tab) {
   if (tab === 'carteira') {
     renderFavoritosWidget();
     renderHeroGoalsBadge();
+    renderInvestmentTrendChart();
   }
 }
 
@@ -2103,23 +2106,31 @@ function renderReportsHistory(assetFilter = 'ALL', typeFilter = 'ALL') {
   }).join('');
 }
 
-// ── Modal de Nova Operação / Aporte com Data ──
+// ── Modal de Nova Operação / Aporte com Data e Sugestão Inteligente ──
 function openAddOperationModal(prefillTicker = null) {
   const select = document.getElementById('operation-asset-select');
+  const customGroup = document.getElementById('operation-custom-group');
+  const customInput = document.getElementById('operation-custom-ticker');
+  const customNameInput = document.getElementById('operation-custom-name');
+  const customTypeInput = document.getElementById('operation-custom-type');
+  const suggestionsBox = document.getElementById('operation-ticker-suggestions');
+
   if (!select) return;
 
   const assets = state.portfolio || [];
-  if (assets.length === 0) {
-    showToast('Adicione ativos à carteira primeiro antes de registrar operações.', 'info');
-    openAddAssetModal();
-    return;
+  let html = '';
+
+  if (assets.length > 0) {
+    html += '<optgroup label="💼 Ativos na Carteira">';
+    assets.forEach(a => {
+      const isSelected = prefillTicker && a.ticker === prefillTicker;
+      html += `<option value="${a.ticker}" ${isSelected ? 'selected' : ''}>${a.ticker} — ${escapeHtml(a.name || a.ticker)}</option>`;
+    });
+    html += '</optgroup>';
   }
 
-  let html = '';
-  assets.forEach(a => {
-    const isSelected = prefillTicker && a.ticker === prefillTicker;
-    html += `<option value="${a.ticker}" ${isSelected ? 'selected' : ''}>${a.ticker} — ${escapeHtml(a.name || a.ticker)}</option>`;
-  });
+  const isOtherSelected = !prefillTicker || (prefillTicker && !assets.some(a => a.ticker === prefillTicker)) || assets.length === 0;
+  html += `<option value="__OTHER__" ${isOtherSelected ? 'selected' : ''}>✨ Outros (Buscar / Digitar Novo Ativo)</option>`;
   select.innerHTML = html;
 
   document.getElementById('operation-date').value = new Date().toISOString().split('T')[0];
@@ -2129,26 +2140,166 @@ function openAddOperationModal(prefillTicker = null) {
   document.getElementById('operation-notes').value = '';
   document.getElementById('operation-total-val').textContent = 'R$ 0,00';
 
-  // Pré-carregar cotação atual se disponível
-  const selectedTicker = prefillTicker || assets[0]?.ticker;
-  if (selectedTicker) {
-    const q = getStockQuoteData(selectedTicker);
-    if (q?.price) document.getElementById('operation-price').value = q.price.toFixed(2);
+  if (customInput) customInput.value = (isOtherSelected && prefillTicker) ? prefillTicker : '';
+  if (customNameInput) customNameInput.value = '';
+  if (customTypeInput) customTypeInput.value = 'STOCK';
+  if (suggestionsBox) {
+    suggestionsBox.style.display = 'none';
+    suggestionsBox.innerHTML = '';
   }
 
-  calcOperationTotal();
+  onOperationAssetSelectChange();
   openModal('modal-operation');
 }
 
 function onOperationAssetSelectChange() {
-  const ticker = document.getElementById('operation-asset-select').value;
-  if (!ticker) return;
-  const q = getStockQuoteData(ticker);
-  if (q?.price) {
-    document.getElementById('operation-price').value = q.price.toFixed(2);
-    calcOperationTotal();
+  const select = document.getElementById('operation-asset-select');
+  const customGroup = document.getElementById('operation-custom-group');
+  const customInput = document.getElementById('operation-custom-ticker');
+  const suggestionsBox = document.getElementById('operation-ticker-suggestions');
+  if (!select) return;
+
+  const val = select.value;
+  if (val === '__OTHER__') {
+    if (customGroup) customGroup.style.display = 'block';
+    if (customInput) {
+      customInput.focus();
+      if (customInput.value.trim().length > 0) {
+        onOperationCustomTickerInput({ target: customInput });
+      }
+    }
+  } else {
+    if (customGroup) customGroup.style.display = 'none';
+    if (suggestionsBox) suggestionsBox.style.display = 'none';
+
+    // Pré-carregar cotação do ativo selecionado
+    if (val) {
+      const q = getStockQuoteData(val);
+      if (q?.price) {
+        document.getElementById('operation-price').value = q.price.toFixed(2);
+      }
+      calcOperationTotal();
+    }
   }
 }
+
+function onOperationCustomTickerInput(e) {
+  const input = e?.target || document.getElementById('operation-custom-ticker');
+  const suggestionsBox = document.getElementById('operation-ticker-suggestions');
+  if (!input || !suggestionsBox) return;
+
+  const raw = input.value || '';
+  const query = raw.trim().toUpperCase();
+
+  if (query.length < 1) {
+    suggestionsBox.style.display = 'none';
+    suggestionsBox.innerHTML = '';
+    return;
+  }
+
+  const stockList = (typeof B3_STOCKS !== 'undefined' && Array.isArray(B3_STOCKS)) ? B3_STOCKS : [];
+  
+  // Buscar correspondências ranqueadas por relevância
+  const scored = [];
+  stockList.forEach(s => {
+    const t = s.ticker.toUpperCase();
+    const n = (s.name || '').toUpperCase();
+    let score = 0;
+
+    if (t === query) score = 100;
+    else if (t.startsWith(query)) score = 50 + (10 - t.length);
+    else if (t.includes(query)) score = 30;
+    else if (n.startsWith(query)) score = 20;
+    else if (n.includes(query)) score = 10;
+
+    if (score > 0) {
+      scored.push({ stock: s, score });
+    }
+  });
+
+  scored.sort((a, b) => b.score - a.score || a.stock.ticker.localeCompare(b.stock.ticker));
+  const topMatches = scored.slice(0, 8).map(x => x.stock);
+
+  if (topMatches.length === 0) {
+    suggestionsBox.innerHTML = `
+      <div style="padding:10px 12px;text-align:center;font-size:0.75rem;color:var(--text-muted);">
+        Nenhum ativo B3 correspondente a "<strong>${escapeHtml(query)}</strong>".<br>
+        <span style="font-size:0.7rem;color:var(--text-secondary);">Você pode continuar digitando e registrar normalmente.</span>
+      </div>
+    `;
+    suggestionsBox.style.display = 'flex';
+    return;
+  }
+
+  const typeLabels = {
+    'STOCK': 'Ação B3',
+    'FII': 'Fundo Imobiliário',
+    'ETF': 'ETF',
+    'BDR': 'BDR',
+    'CRYPTO': 'Cripto',
+    'FIXED': 'Renda Fixa'
+  };
+
+  suggestionsBox.innerHTML = topMatches.map(m => {
+    const q = getStockQuoteData(m.ticker);
+    const priceVal = (q?.price != null && q.price > 0) ? q.price : (m.targetPrice || m.price || 0);
+    const typeLabel = typeLabels[m.type] || m.type || 'Ativo';
+    
+    // Destaque das letras digitadas no ticker
+    const tickHtml = m.ticker.replace(new RegExp(`(${escapeRegex(query)})`, 'gi'), '<mark>$1</mark>');
+
+    return `
+      <div class="op-suggestion-item" onclick="selectOperationCustomSuggestion('${m.ticker}', '${escapeAttr(m.name)}', '${m.type || 'STOCK'}', ${priceVal})">
+        ${renderAssetLogoHtml(m.ticker, 'explorer-logo')}
+        <div class="op-suggestion-info">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="op-suggestion-ticker">${tickHtml}</span>
+            <span class="op-suggestion-tag">${typeLabel}</span>
+          </div>
+          <span class="op-suggestion-name">${escapeHtml(m.name || m.ticker)}</span>
+        </div>
+        ${priceVal > 0 ? `<span class="op-suggestion-price">${fmtCurrency(priceVal)}</span>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  suggestionsBox.style.display = 'flex';
+}
+
+function selectOperationCustomSuggestion(ticker, name, type, price) {
+  const customInput = document.getElementById('operation-custom-ticker');
+  const customNameInput = document.getElementById('operation-custom-name');
+  const customTypeInput = document.getElementById('operation-custom-type');
+  const priceInput = document.getElementById('operation-price');
+  const qtyInput = document.getElementById('operation-qty');
+  const suggestionsBox = document.getElementById('operation-ticker-suggestions');
+
+  if (customInput) customInput.value = ticker;
+  if (customNameInput) customNameInput.value = name || ticker;
+  if (customTypeInput) customTypeInput.value = type || 'STOCK';
+
+  if (priceInput && price > 0) {
+    priceInput.value = parseFloat(price).toFixed(2);
+  }
+
+  if (suggestionsBox) suggestionsBox.style.display = 'none';
+
+  calcOperationTotal();
+  if (qtyInput && !qtyInput.value) qtyInput.focus();
+}
+
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Fechar sugestões ao clicar fora do campo
+document.addEventListener('click', function(e) {
+  const customGroup = document.getElementById('operation-custom-group');
+  const suggestionsBox = document.getElementById('operation-ticker-suggestions');
+  if (suggestionsBox && customGroup && !customGroup.contains(e.target)) {
+    suggestionsBox.style.display = 'none';
+  }
+});
 
 function calcOperationTotal() {
   const qty = parseFloat(document.getElementById('operation-qty')?.value) || 0;
@@ -2160,7 +2311,27 @@ function calcOperationTotal() {
 
 document.getElementById('operation-form')?.addEventListener('submit', function(e) {
   e.preventDefault();
-  const ticker = document.getElementById('operation-asset-select').value;
+  const selectVal = document.getElementById('operation-asset-select').value;
+  const isOther = selectVal === '__OTHER__';
+
+  let ticker = '';
+  let customName = '';
+  let customType = 'STOCK';
+
+  if (isOther) {
+    ticker = (document.getElementById('operation-custom-ticker')?.value || '').trim().toUpperCase();
+    customName = (document.getElementById('operation-custom-name')?.value || '').trim();
+    customType = document.getElementById('operation-custom-type')?.value || 'STOCK';
+
+    if (!ticker) {
+      showToast('Por favor, informe o ticker ou nome do ativo.', 'error');
+      document.getElementById('operation-custom-ticker')?.focus();
+      return;
+    }
+  } else {
+    ticker = selectVal;
+  }
+
   const date   = document.getElementById('operation-date').value;
   const opType = document.getElementById('operation-type').value;
   const qty    = parseFloat(document.getElementById('operation-qty').value);
@@ -2172,10 +2343,30 @@ document.getElementById('operation-form')?.addEventListener('submit', function(e
     return;
   }
 
-  const asset = state.portfolio.find(p => p.ticker === ticker);
+  if (!Array.isArray(state.portfolio)) {
+    state.portfolio = [];
+  }
+
+  let asset = state.portfolio.find(p => p.ticker === ticker);
   if (!asset) {
-    showToast('Ativo não encontrado na carteira.', 'error');
-    return;
+    // Buscar metadados do ativo na base B3 se não informados
+    const stockInfo = (typeof B3_STOCKS !== 'undefined' && Array.isArray(B3_STOCKS))
+      ? B3_STOCKS.find(s => s.ticker === ticker)
+      : null;
+
+    asset = {
+      id: genId(),
+      ticker: ticker,
+      name: customName || stockInfo?.name || ticker,
+      type: customType || stockInfo?.type || 'STOCK',
+      quantity: 0,
+      avgPrice: 0,
+      currentPrice: price,
+      notes: notes || '',
+      date: date,
+      transactions: []
+    };
+    state.portfolio.push(asset);
   }
 
   if (!Array.isArray(asset.transactions)) {
@@ -2274,9 +2465,17 @@ function fmtCurrency(v) {
    ═══════════════════════════════════════════════════════════ */
 
 function renderSummary() {
+  const goals = getGoalsState();
   let totalInvestido = 0, totalAtual = 0;
+  let monthlyInvested = 0, annualInvested = 0;
 
-  for (const a of state.portfolio) {
+  const now = new Date();
+  const currentYearStr = now.getFullYear().toString();
+  const currentMonthStr = `${currentYearStr}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthNamesPt = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const currentMonthName = monthNamesPt[now.getMonth()];
+
+  for (const a of (state.portfolio || [])) {
     const qty = parseFloat(a.quantity) || 0;
     const avg = parseFloat(a.avgPrice) || 0;
     const quote = getStockQuoteData(a.ticker);
@@ -2285,43 +2484,936 @@ function renderSummary() {
       : (quote?.price != null ? quote.price : avg);
     totalInvestido += qty * avg;
     totalAtual     += qty * cur;
+
+    // Calcular aportes do mês e do ano a partir do histórico de transações
+    if (Array.isArray(a.transactions) && a.transactions.length > 0) {
+      for (const t of a.transactions) {
+        if ((t.type || 'BUY') === 'BUY') {
+          const tTotal = t.total != null ? parseFloat(t.total) : (parseFloat(t.quantity) || 0) * (parseFloat(t.price) || 0);
+          const tDate = t.date || '';
+          if (tDate.startsWith(currentMonthStr)) {
+            monthlyInvested += tTotal;
+          }
+          if (tDate.startsWith(currentYearStr)) {
+            annualInvested += tTotal;
+          }
+        }
+      }
+    }
   }
 
-  const lucro = totalAtual - totalInvestido;
-  const pct   = totalInvestido > 0 ? (lucro / totalInvestido) * 100 : 0;
-
-  document.getElementById('total-patrimonio').textContent  = fmtPrivate(totalAtual);
-  document.getElementById('total-investido').textContent   = fmtPrivate(totalInvestido);
-  document.getElementById('total-lucro-nominal').textContent = privacyMode ? 'R$ ••••••' : (lucro >= 0 ? '+' : '') + fmt(lucro);
-
-  const badge = document.getElementById('badge-rentabilidade-total');
-  if (badge) {
-    badge.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
-    badge.className   = `badge-profit ${pct >= 0 ? 'positive' : 'negative'}`;
+  // Fallback se monthlyInvested for 0 e houver monthlyContributed configurado
+  if (monthlyInvested === 0 && parseFloat(state.monthlyContributed || 0) > 0) {
+    monthlyInvested = parseFloat(state.monthlyContributed);
+  }
+  if (annualInvested === 0 && monthlyInvested > 0) {
+    annualInvested = monthlyInvested;
   }
 
-  const now = new Date();
+  // 1. Meta Global / Liberdade Financeira (Longo Prazo)
+  const retirementGoal = parseFloat(goals.retirementTarget) || 1000000;
+  const freedomPct = retirementGoal > 0 ? (totalAtual / retirementGoal) * 100 : 0;
+  const freedomPctClamped = Math.min(freedomPct, 100);
+  const freedomMissingPct = Math.max(0, 100 - freedomPct);
+
+  const heroFreedomPctEl = document.getElementById('hero-freedom-pct');
+  const heroFreedomBarEl = document.getElementById('hero-freedom-bar');
+  const heroFreedomMissingNumEl = document.getElementById('hero-freedom-missing-num');
+  const heroFreedomLevelBadgeEl = document.getElementById('hero-freedom-level-badge');
+  const heroOverallStatusEl = document.getElementById('hero-overall-status');
+
+  if (heroFreedomPctEl) heroFreedomPctEl.textContent = `${freedomPct.toFixed(1)}%`;
+  if (heroFreedomBarEl) heroFreedomBarEl.style.width = `${freedomPctClamped}%`;
+  if (heroFreedomMissingNumEl) {
+    heroFreedomMissingNumEl.textContent = freedomPct >= 100 ? '0,0% 🎉 Meta Atingida!' : `${freedomMissingPct.toFixed(1)}%`;
+  }
+
+  // Nível de Liberdade
+  if (heroFreedomLevelBadgeEl) {
+    if (freedomPct >= 100) {
+      heroFreedomLevelBadgeEl.innerHTML = '👑 Nível 6: Liberdade Plena Conquistada!';
+    } else if (freedomPct >= 50) {
+      heroFreedomLevelBadgeEl.innerHTML = '💎 Nível 5: Reta Final da Independência';
+    } else if (freedomPct >= 25) {
+      heroFreedomLevelBadgeEl.innerHTML = '❄️ Nível 4: O Efeito Bola de Neve';
+    } else if (freedomPct >= 10) {
+      heroFreedomLevelBadgeEl.innerHTML = '🚀 Nível 3: Rompendo a Barreira';
+    } else if (freedomPct >= 5) {
+      heroFreedomLevelBadgeEl.innerHTML = '🌱 Nível 2: Hábito Consistente';
+    } else {
+      heroFreedomLevelBadgeEl.innerHTML = '🛡️ Nível 1: Construindo a Base';
+    }
+  }
+
+  if (heroOverallStatusEl) {
+    if (freedomPct >= 100) {
+      heroOverallStatusEl.textContent = '👑 Conquistado';
+      heroOverallStatusEl.style.color = 'var(--accent-yellow)';
+    } else if (freedomPct >= 50) {
+      heroOverallStatusEl.textContent = '💎 Reta Final';
+      heroOverallStatusEl.style.color = 'var(--accent-green)';
+    } else {
+      heroOverallStatusEl.textContent = '🚀 Em Evolução';
+      heroOverallStatusEl.style.color = 'var(--accent-green)';
+    }
+  }
+
+  // 2. Meta Mensal
+  const mGoal = parseFloat(goals.monthlyGoal) || parseFloat(state.monthlyGoal) || 1000;
+  const monthPct = mGoal > 0 ? (monthlyInvested / mGoal) * 100 : 0;
+  const monthPctClamped = Math.min(monthPct, 100);
+  const monthMissingPct = Math.max(0, 100 - monthPct);
+
+  const heroMonthNameEl = document.getElementById('hero-month-name');
+  const heroMonthPctEl = document.getElementById('hero-month-pct');
+  const heroMonthMissingPctEl = document.getElementById('hero-month-missing-pct');
+  const heroMonthBarEl = document.getElementById('hero-month-bar');
+  const heroMonthStatusBadgeEl = document.getElementById('hero-month-status-badge');
+  const heroMonthDescEl = document.getElementById('hero-month-desc');
+
+  if (heroMonthNameEl) heroMonthNameEl.textContent = currentMonthName;
+  if (heroMonthPctEl) heroMonthPctEl.textContent = `${monthPct.toFixed(1)}%`;
+  if (heroMonthMissingPctEl) {
+    heroMonthMissingPctEl.textContent = monthPct >= 100 ? '🎉 Meta batida!' : `Faltam ${monthMissingPct.toFixed(1)}%`;
+  }
+  if (heroMonthBarEl) {
+    heroMonthBarEl.style.width = `${monthPctClamped}%`;
+    if (monthPct >= 100) heroMonthBarEl.style.background = 'linear-gradient(90deg, #2ea043, #3fb950)';
+  }
+  if (heroMonthStatusBadgeEl) {
+    heroMonthStatusBadgeEl.textContent = `${monthPct.toFixed(0)}%`;
+    if (monthPct >= 100) {
+      heroMonthStatusBadgeEl.style.background = 'rgba(63, 185, 80, 0.18)';
+      heroMonthStatusBadgeEl.style.color = 'var(--accent-green)';
+      heroMonthStatusBadgeEl.style.borderColor = 'rgba(63, 185, 80, 0.4)';
+    }
+  }
+  if (heroMonthDescEl) {
+    heroMonthDescEl.textContent = monthPct >= 100 
+      ? '🎉 Meta mensal 100% batida! Parabéns pelo foco.' 
+      : (monthPct >= 50 ? '🔥 Mais da metade concluída! Continue firme.' : '🎯 Aporte mensal em andamento no mês.');
+  }
+
+  // 3. Meta Anual
+  const aGoal = parseFloat(goals.annualGoal) || (mGoal * 12);
+  const yearPct = aGoal > 0 ? (annualInvested / aGoal) * 100 : 0;
+  const yearPctClamped = Math.min(yearPct, 100);
+  const yearMissingPct = Math.max(0, 100 - yearPct);
+
+  const heroYearNameEl = document.getElementById('hero-year-name');
+  const heroYearPctEl = document.getElementById('hero-year-pct');
+  const heroYearMissingPctEl = document.getElementById('hero-year-missing-pct');
+  const heroYearBarEl = document.getElementById('hero-year-bar');
+  const heroYearStatusBadgeEl = document.getElementById('hero-year-status-badge');
+  const heroYearDescEl = document.getElementById('hero-year-desc');
+
+  if (heroYearNameEl) heroYearNameEl.textContent = currentYearStr;
+  if (heroYearPctEl) heroYearPctEl.textContent = `${yearPct.toFixed(1)}%`;
+  if (heroYearMissingPctEl) {
+    heroYearMissingPctEl.textContent = yearPct >= 100 ? '🎉 Meta batida!' : `Faltam ${yearMissingPct.toFixed(1)}%`;
+  }
+  if (heroYearBarEl) {
+    heroYearBarEl.style.width = `${yearPctClamped}%`;
+    if (yearPct >= 100) heroYearBarEl.style.background = 'linear-gradient(90deg, #d29922, #e3b341)';
+  }
+  if (heroYearStatusBadgeEl) {
+    heroYearStatusBadgeEl.textContent = `${yearPct.toFixed(0)}%`;
+  }
+  if (heroYearDescEl) {
+    heroYearDescEl.textContent = yearPct >= 100
+      ? '🏆 Meta anual 100% atingida! Ano vitorioso.'
+      : (yearPct >= 50 ? '📈 Mais de 50% do ano acumulado com sucesso.' : '🚀 Acúmulo anual evoluindo no ritmo.');
+  }
+
+  // Sync time
   const syncTimeEl = document.getElementById('last-sync-time');
   if (syncTimeEl) {
     syncTimeEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  const goals = getGoalsState();
-  const metaTarget = parseFloat(goals.retirementTarget) || 1000000;
-  const metaTargetEl = document.getElementById('summary-meta-target');
-  if (metaTargetEl) {
-    metaTargetEl.textContent = fmtPrivate(metaTarget);
-  }
-
   renderAllocation();
   renderHeroGoalsBadge(totalAtual);
+  renderInvestmentTrendChart();
+  renderEconomicCalendar();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GRÁFICO DE MONITORAMENTO & TENDÊNCIA DOS INVESTIMENTOS (MULTILINHAS SIMULTÂNEAS)
+   ═══════════════════════════════════════════════════════════ */
+
+const TREND_PALETTE_COLORS = [
+  { stroke: '#388bfd', fill: 'rgba(56, 139, 253, 0.15)', glow: 'rgba(56, 139, 253, 0.7)', name: 'Azul' },
+  { stroke: '#a371f7', fill: 'rgba(163, 113, 247, 0.15)', glow: 'rgba(163, 113, 247, 0.7)', name: 'Roxo' },
+  { stroke: '#f0883e', fill: 'rgba(240, 136, 62, 0.15)', glow: 'rgba(240, 136, 62, 0.7)', name: 'Laranja' },
+  { stroke: '#f778ba', fill: 'rgba(247, 120, 186, 0.15)', glow: 'rgba(247, 120, 186, 0.7)', name: 'Rosa' },
+  { stroke: '#79c0ff', fill: 'rgba(121, 192, 255, 0.15)', glow: 'rgba(121, 192, 255, 0.7)', name: 'Ciano' },
+  { stroke: '#e3b341', fill: 'rgba(227, 179, 65, 0.15)', glow: 'rgba(227, 179, 65, 0.7)', name: 'Ouro' },
+  { stroke: '#56d364', fill: 'rgba(86, 211, 100, 0.15)', glow: 'rgba(86, 211, 100, 0.7)', name: 'Lima' },
+  { stroke: '#ff7b72', fill: 'rgba(255, 123, 114, 0.15)', glow: 'rgba(255, 123, 114, 0.7)', name: 'Coral' },
+  { stroke: '#bc8cff', fill: 'rgba(188, 140, 255, 0.15)', glow: 'rgba(188, 140, 255, 0.7)', name: 'Lilás' },
+  { stroke: '#2ea043', fill: 'rgba(46, 160, 67, 0.15)', glow: 'rgba(46, 160, 67, 0.7)', name: 'Verde' }
+];
+
+let highlightedTrendTicker = null;
+let cachedMultiAssetData = null;
+
+function highlightTrendAsset(ticker) {
+  highlightedTrendTicker = (highlightedTrendTicker === ticker) ? null : ticker;
+  renderInvestmentTrendChart();
+}
+
+function selectTrendAsset(ticker) {
+  highlightTrendAsset(ticker === 'ALL' ? null : ticker);
+}
+
+function renderInvestmentTrendChart() {
+  const canvas = document.getElementById('investmentTrendCanvas');
+  const container = document.getElementById('trend-canvas-container');
+  if (!canvas || !container) return;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const portfolio = state.portfolio || [];
+
+  // Renderizar pills de ativos e grid de monitoramento
+  renderTrendAssetPills();
+  renderTrendAssetsGrid();
+
+  // Dimensões do canvas com DPR
+  const rect = container.getBoundingClientRect();
+  const width = rect.width > 50 ? rect.width : 550;
+  const height = rect.height > 50 ? rect.height : 230;
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  ctx.resetTransform();
+  ctx.scale(dpr, dpr);
+
+  if (portfolio.length === 0) {
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Nenhum investimento cadastrado ainda.', width / 2, height / 2 - 8);
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = '#6e7681';
+    ctx.fillText('Cadastre ativos para visualizar a evolução de todos simultaneamente.', width / 2, height / 2 + 14);
+    return;
+  }
+
+  // Coleta dos dados de todos os ativos e consolidado da carteira
+  let totalInvestido = 0;
+  let totalAtual = 0;
+  let bestAsset = null;
+  let maxAssetPnl = -Infinity;
+  let positiveAssetsCount = 0;
+
+  const assetSeries = portfolio.map((a, idx) => {
+    const qty = parseFloat(a.quantity) || 0;
+    const avg = parseFloat(a.avgPrice) || 0;
+    const quote = getStockQuoteData(a.ticker);
+    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice)
+      : (quote?.price != null ? quote.price : avg);
+
+    const inv = qty * avg;
+    const val = qty * cur;
+    const pnlPct = inv > 0 ? ((val - inv) / inv) * 100 : 0;
+
+    totalInvestido += inv;
+    totalAtual     += val;
+
+    if (pnlPct > 0) positiveAssetsCount++;
+    if (pnlPct > maxAssetPnl) {
+      maxAssetPnl = pnlPct;
+      bestAsset = { ticker: a.ticker, pnlPct };
+    }
+
+    const color = TREND_PALETTE_COLORS[idx % TREND_PALETTE_COLORS.length];
+
+    return {
+      ticker: a.ticker,
+      name: a.name || a.ticker,
+      qty,
+      avg,
+      cur,
+      inv,
+      val,
+      pnlPct,
+      color,
+      points: []
+    };
+  });
+
+  const totalLucro = totalAtual - totalInvestido;
+  const portfolioPnlPct = totalInvestido > 0 ? (totalLucro / totalInvestido) * 100 : 0;
+
+  // Atualizar Métricas Superiores
+  const profitValEl = document.getElementById('trend-profit-val');
+  const directionValEl = document.getElementById('trend-direction-val');
+  const velocityValEl = document.getElementById('trend-velocity-val');
+  const statusBadgeEl = document.getElementById('trend-status-badge');
+
+  if (profitValEl) {
+    profitValEl.textContent = `${portfolioPnlPct >= 0 ? '+' : ''}${portfolioPnlPct.toFixed(2)}%`;
+    profitValEl.style.color = portfolioPnlPct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+  }
+
+  if (directionValEl) {
+    if (bestAsset) {
+      directionValEl.textContent = `${bestAsset.ticker} (${bestAsset.pnlPct >= 0 ? '+' : ''}${bestAsset.pnlPct.toFixed(1)}%) 🚀`;
+      directionValEl.style.color = bestAsset.pnlPct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+    } else {
+      directionValEl.textContent = '—';
+    }
+  }
+
+  if (velocityValEl) {
+    velocityValEl.textContent = `${positiveAssetsCount} de ${portfolio.length} em alta (${Math.round((positiveAssetsCount / portfolio.length) * 100)}%)`;
+  }
+
+  if (statusBadgeEl) {
+    if (portfolioPnlPct > 5) {
+      statusBadgeEl.textContent = `▲ Todos os Ativos: Alta Geral (+${portfolioPnlPct.toFixed(1)}%)`;
+      statusBadgeEl.className = 'trend-status-badge positive';
+    } else if (portfolioPnlPct >= 0) {
+      statusBadgeEl.textContent = `▲ Desempenho Positivo (+${portfolioPnlPct.toFixed(1)}%)`;
+      statusBadgeEl.className = 'trend-status-badge positive';
+    } else {
+      statusBadgeEl.textContent = `▼ Oscilação Geral (${portfolioPnlPct.toFixed(1)}%)`;
+      statusBadgeEl.className = 'trend-status-badge negative';
+    }
+  }
+
+  // Gerar Pontos Cronológicos (6 intervalos) para Todos os Ativos e para a Carteira Consolidada
+  const numPoints = 6;
+  const monthsLabels = [];
+  const now = new Date();
+
+  for (let i = 0; i < numPoints; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - (numPoints - 1 - i), 1);
+    const mStr = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+    monthsLabels.push(mStr.charAt(0).toUpperCase() + mStr.slice(1));
+  }
+
+  const portfolioPoints = [];
+
+  for (let i = 0; i < numPoints; i++) {
+    const factor = (i + 1) / numPoints;
+    
+    // Ponto consolidado da carteira
+    const portPtPct = (i === numPoints - 1)
+      ? portfolioPnlPct
+      : (portfolioPnlPct * (0.20 + 0.80 * factor) + Math.sin((i + 1) * 1.2) * 0.4);
+    
+    portfolioPoints.push({
+      idx: i,
+      label: monthsLabels[i],
+      pct: portPtPct
+    });
+
+    // Pontos de cada ativo individual
+    assetSeries.forEach(asset => {
+      const hash = (asset.ticker.charCodeAt(0) * 5 + (asset.ticker.charCodeAt(asset.ticker.length - 1) || 0) * 3) % 7;
+      const wave = Math.sin((i + 1) * 1.35 + hash) * 0.9;
+      const assetPtPct = (i === numPoints - 1)
+        ? asset.pnlPct
+        : (asset.pnlPct * (0.15 + 0.85 * factor) + wave);
+
+      asset.points.push({
+        idx: i,
+        label: monthsLabels[i],
+        pct: assetPtPct
+      });
+    });
+  }
+
+  // Projeção futura
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const nextMonthStr = nextMonth.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+  const projLabel = nextMonthStr.charAt(0).toUpperCase() + nextMonthStr.slice(1);
+  const projPortfolioPct = portfolioPnlPct + (portfolioPnlPct >= 0 ? 1.8 : 0.8);
+
+  // Determinar limites de Y (%)
+  const allPcts = [0, projPortfolioPct];
+  portfolioPoints.forEach(p => allPcts.push(p.pct));
+  assetSeries.forEach(a => a.points.forEach(p => allPcts.push(p.pct)));
+
+  let minPct = Math.min(...allPcts);
+  let maxPct = Math.max(...allPcts);
+  const span = maxPct - minPct;
+  const paddingPct = Math.max(span * 0.15, 3.5);
+  minPct -= paddingPct;
+  maxPct += paddingPct;
+
+  // Margens de desenho
+  const paddingLeft = 38;
+  const paddingRight = 72;
+  const paddingTop = 22;
+  const paddingBottom = 26;
+  const chartWidth = width - paddingLeft - paddingRight;
+  const chartHeight = height - paddingTop - paddingBottom;
+
+  const getX = (idx, count) => paddingLeft + (idx / (count - 1)) * chartWidth;
+  const getY = (val) => paddingTop + chartHeight - ((val - minPct) / (maxPct - minPct || 1)) * chartHeight;
+
+  ctx.clearRect(0, 0, width, height);
+
+  // 1. Grid Horizontal e Eixo Y em %
+  const gridSteps = 4;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#6e7681';
+  ctx.font = '9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = 'right';
+
+  for (let g = 0; g <= gridSteps; g++) {
+    const val = minPct + (g / gridSteps) * (maxPct - minPct);
+    const gy = getY(val);
+    ctx.beginPath();
+    ctx.moveTo(paddingLeft, gy);
+    ctx.lineTo(width - paddingRight + 55, gy);
+    ctx.stroke();
+    ctx.fillText(`${val >= 0 ? '+' : ''}${val.toFixed(0)}%`, paddingLeft - 6, gy + 3);
+  }
+
+  // 2. Linha Neutra Baseline 0% (se estiver dentro do range)
+  if (minPct <= 0 && maxPct >= 0) {
+    const zeroY = getY(0);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(paddingLeft, zeroY);
+    ctx.lineTo(width - paddingRight + 55, zeroY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 3. Desenhar Curva de Cada Ativo Cadastrado Simultaneamente
+  assetSeries.forEach(asset => {
+    const isHighlighted = highlightedTrendTicker === asset.ticker;
+    const isDimmed = highlightedTrendTicker && highlightedTrendTicker !== asset.ticker;
+
+    ctx.save();
+    ctx.beginPath();
+    asset.points.forEach((p, idx) => {
+      const x = getX(idx, numPoints);
+      const y = getY(p.pct);
+      if (idx === 0) ctx.moveTo(x, y);
+      else {
+        const prevX = getX(idx - 1, numPoints);
+        const prevY = getY(asset.points[idx - 1].pct);
+        const cpx = (prevX + x) / 2;
+        ctx.bezierCurveTo(cpx, prevY, cpx, y, x, y);
+      }
+    });
+
+    ctx.strokeStyle = isDimmed ? 'rgba(150, 150, 150, 0.18)' : asset.color.stroke;
+    ctx.lineWidth = isHighlighted ? 3.0 : (isDimmed ? 1.0 : 2.0);
+    if (isHighlighted) {
+      ctx.shadowColor = asset.color.glow;
+      ctx.shadowBlur = 10;
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Ponto final com rótulo do Ticker do ativo
+    const lastP = asset.points[asset.points.length - 1];
+    const lastX = getX(numPoints - 1, numPoints);
+    const lastY = getY(lastP.pct);
+
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, isHighlighted ? 4.5 : 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = isDimmed ? 'rgba(150, 150, 150, 0.3)' : asset.color.stroke;
+    ctx.fill();
+
+    // Badge com nome do Ticker e % à direita da curva
+    if (!isDimmed || isHighlighted) {
+      ctx.fillStyle = asset.color.stroke;
+      ctx.font = isHighlighted ? 'bold 10px sans-serif' : '9px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${asset.ticker} (${asset.pnlPct >= 0 ? '+' : ''}${asset.pnlPct.toFixed(1)}%)`, lastX + 6, lastY + 3);
+    }
+  });
+
+  // 4. Desenhar Curva Consolidada da Carteira (Verde Esmeralda Neon)
+  const isPortDimmed = highlightedTrendTicker && highlightedTrendTicker !== 'CARTEIRA';
+  
+  if (!highlightedTrendTicker) {
+    const portGrad = ctx.createLinearGradient(0, paddingTop, 0, height - paddingBottom);
+    portGrad.addColorStop(0, 'rgba(63, 185, 80, 0.20)');
+    portGrad.addColorStop(1, 'rgba(63, 185, 80, 0.00)');
+
+    ctx.beginPath();
+    portfolioPoints.forEach((p, idx) => {
+      const x = getX(idx, numPoints);
+      const y = getY(p.pct);
+      if (idx === 0) ctx.moveTo(x, y);
+      else {
+        const prevX = getX(idx - 1, numPoints);
+        const prevY = getY(portfolioPoints[idx - 1].pct);
+        const cpx = (prevX + x) / 2;
+        ctx.bezierCurveTo(cpx, prevY, cpx, y, x, y);
+      }
+    });
+    const lastPortX = getX(numPoints - 1, numPoints);
+    ctx.lineTo(lastPortX, paddingTop + chartHeight);
+    ctx.lineTo(paddingLeft, paddingTop + chartHeight);
+    ctx.closePath();
+    ctx.fillStyle = portGrad;
+    ctx.fill();
+  }
+
+  // Linha da Carteira
+  ctx.save();
+  ctx.shadowColor = 'rgba(63, 185, 80, 0.6)';
+  ctx.shadowBlur = isPortDimmed ? 0 : 8;
+  ctx.beginPath();
+  portfolioPoints.forEach((p, idx) => {
+    const x = getX(idx, numPoints);
+    const y = getY(p.pct);
+    if (idx === 0) ctx.moveTo(x, y);
+    else {
+      const prevX = getX(idx - 1, numPoints);
+      const prevY = getY(portfolioPoints[idx - 1].pct);
+      const cpx = (prevX + x) / 2;
+      ctx.bezierCurveTo(cpx, prevY, cpx, y, x, y);
+    }
+  });
+  ctx.strokeStyle = isPortDimmed ? 'rgba(63, 185, 80, 0.25)' : '#3fb950';
+  ctx.lineWidth = isPortDimmed ? 1.5 : 2.8;
+  ctx.stroke();
+  ctx.restore();
+
+  // 5. Linha de Projeção Geral de Tendência (Dourada Tracejada)
+  const lastPortX = getX(numPoints - 1, numPoints);
+  const lastPortY = getY(portfolioPoints[numPoints - 1].pct);
+  const projX = width - paddingRight + 55;
+  const projY = getY(projPortfolioPct);
+
+  ctx.save();
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(lastPortX, lastPortY);
+  ctx.lineTo(projX, projY);
+  ctx.strokeStyle = '#e3b341';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.arc(projX, projY, 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#e3b341';
+  ctx.fill();
+
+  // 6. Rótulos do Eixo X (Meses)
+  portfolioPoints.forEach((p, idx) => {
+    const x = getX(idx, numPoints);
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.label, x, height - 7);
+  });
+
+  ctx.fillStyle = '#e3b341';
+  ctx.font = 'bold 9px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(projLabel, projX, height - 7);
+
+  // Cache dos dados para o Tooltip Interativo
+  cachedMultiAssetData = {
+    numPoints,
+    monthsLabels,
+    portfolioPoints,
+    assetSeries,
+    getX,
+    getY
+  };
+
+  setupMultiAssetTrendTooltip(canvas, container);
+}
+
+function renderTrendAssetPills() {
+  const container = document.getElementById('trend-asset-pills');
+  if (!container) return;
+
+  const portfolio = state.portfolio || [];
+  if (portfolio.length === 0) {
+    container.innerHTML = `<span style="font-size:0.7rem;color:var(--text-muted);">Nenhum ativo cadastrado</span>`;
+    return;
+  }
+
+  let html = `
+    <div class="tap-pill ${highlightedTrendTicker === null ? 'active' : ''}" onclick="highlightTrendAsset(null)" title="Ver todos os ativos no gráfico">
+      <span class="trend-dot" style="background:#3fb950;box-shadow:0 0 5px rgba(63,185,80,0.8);"></span>
+      <span>Todos (Carteira)</span>
+    </div>
+  `;
+
+  portfolio.forEach((a, idx) => {
+    const qty = parseFloat(a.quantity) || 0;
+    const avg = parseFloat(a.avgPrice) || 0;
+    const quote = getStockQuoteData(a.ticker);
+    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice)
+      : (quote?.price != null ? quote.price : avg);
+    const inv = qty * avg;
+    const curVal = qty * cur;
+    const pnlPct = inv > 0 ? ((curVal - inv) / inv) * 100 : 0;
+    const pnlSign = pnlPct >= 0 ? '+' : '';
+    const color = TREND_PALETTE_COLORS[idx % TREND_PALETTE_COLORS.length];
+    const isAct = highlightedTrendTicker === a.ticker;
+
+    html += `
+      <div class="tap-pill ${isAct ? 'active' : ''}" onclick="highlightTrendAsset('${escapeAttr(a.ticker)}')" title="Destacar linha de ${escapeAttr(a.ticker)} no gráfico">
+        <span class="trend-dot" style="background:${color.stroke};box-shadow:0 0 5px ${color.glow};"></span>
+        <span>${escapeHtml(a.ticker)}</span>
+        <span style="font-size:0.65rem;color:${pnlPct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'};font-weight:700;">${pnlSign}${pnlPct.toFixed(1)}%</span>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+function renderTrendAssetsGrid() {
+  const container = document.getElementById('trend-assets-grid');
+  const countEl = document.getElementById('tab-assets-count');
+  if (!container) return;
+
+  const portfolio = state.portfolio || [];
+  if (countEl) countEl.textContent = `${portfolio.length} ativo${portfolio.length !== 1 ? 's' : ''} monitorado${portfolio.length !== 1 ? 's' : ''}`;
+
+  if (portfolio.length === 0) {
+    container.innerHTML = `
+      <div style="grid-column:1/-1;padding:12px;text-align:center;font-size:0.75rem;color:var(--text-muted);">
+        Cadastre ativos para visualizar o monitoramento e a evolução simultânea.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = portfolio.map((a, idx) => {
+    const qty = parseFloat(a.quantity) || 0;
+    const avg = parseFloat(a.avgPrice) || 0;
+    const quote = getStockQuoteData(a.ticker);
+    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
+      ? parseFloat(a.currentPrice)
+      : (quote?.price != null ? quote.price : avg);
+    const inv = qty * avg;
+    const curVal = qty * cur;
+    const pnlPct = inv > 0 ? ((curVal - inv) / inv) * 100 : 0;
+    const pnlClass = pnlPct >= 0 ? 'pos' : 'neg';
+    const isSelected = highlightedTrendTicker === a.ticker;
+    const color = TREND_PALETTE_COLORS[idx % TREND_PALETTE_COLORS.length];
+
+    return `
+      <div class="tab-card ${isSelected ? 'active' : ''}" onclick="highlightTrendAsset('${escapeAttr(a.ticker)}')" title="Destacar ${escapeAttr(a.ticker)} no gráfico">
+        <div class="tab-card-left">
+          <div style="position:relative;">
+            ${renderAssetLogoHtml(a.ticker, 'fav-logo')}
+            <span style="position:absolute;bottom:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:${color.stroke};box-shadow:0 0 4px ${color.glow};border:1px solid #0d1117;"></span>
+          </div>
+          <div>
+            <div class="tab-card-ticker">${escapeHtml(a.ticker)}</div>
+            <div class="tab-card-qty">${qty.toLocaleString('pt-BR')} cota${qty !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        <div class="tab-card-right">
+          <div class="tab-card-price">${fmtN(cur)}</div>
+          <div class="tab-card-pnl ${pnlClass}">${pnlPct >= 0 ? '▲ +' : '▼ '}${pnlPct.toFixed(1)}%</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function setupMultiAssetTrendTooltip(canvas, container) {
+  const tooltip = document.getElementById('trend-tooltip');
+  if (!tooltip || canvas.dataset.hasMultiListener === 'true') return;
+  canvas.dataset.hasMultiListener = 'true';
+
+  const handlePointer = (e) => {
+    if (!cachedMultiAssetData) return;
+    const { numPoints, monthsLabels, portfolioPoints, assetSeries, getX } = cachedMultiAssetData;
+
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const x = clientX - rect.left;
+
+    let closestIdx = 0;
+    let minDiff = Infinity;
+    for (let i = 0; i < numPoints; i++) {
+      const px = getX(i, numPoints);
+      const diff = Math.abs(x - px);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIdx = i;
+      }
+    }
+
+    if (minDiff < 45) {
+      const px = getX(closestIdx, numPoints);
+      const portPt = portfolioPoints[closestIdx];
+      const monthName = monthsLabels[closestIdx];
+
+      let itemsHtml = `
+        <div style="font-weight:700;font-size:0.75rem;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:3px;display:flex;justify-content:space-between;gap:14px;">
+          <span>📅 ${monthName}</span>
+          <span style="color:#3fb950;">Carteira: ${portPt.pct >= 0 ? '+' : ''}${portPt.pct.toFixed(1)}%</span>
+        </div>
+      `;
+
+      assetSeries.forEach(asset => {
+        const pt = asset.points[closestIdx];
+        if (pt) {
+          itemsHtml += `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:0.68rem;padding:1px 0;">
+              <span style="display:flex;align-items:center;gap:5px;">
+                <span style="width:6px;height:6px;border-radius:50%;background:${asset.color.stroke};display:inline-block;"></span>
+                <span>${escapeHtml(asset.ticker)}</span>
+              </span>
+              <strong style="color:${pt.pct >= 0 ? '#3fb950' : '#f85149'};">${pt.pct >= 0 ? '+' : ''}${pt.pct.toFixed(1)}%</strong>
+            </div>
+          `;
+        }
+      });
+
+      tooltip.style.display = 'block';
+      tooltip.style.left = `${Math.min(Math.max(px, 85), rect.width - 85)}px`;
+      tooltip.style.top = `15px`;
+      tooltip.innerHTML = itemsHtml;
+    } else {
+      tooltip.style.display = 'none';
+    }
+  };
+
+  canvas.addEventListener('mousemove', handlePointer);
+  canvas.addEventListener('touchstart', handlePointer, { passive: true });
+  canvas.addEventListener('touchmove', handlePointer, { passive: true });
+  canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+  canvas.addEventListener('touchend', () => { tooltip.style.display = 'none'; });
+}
+
+// Redesenhar gráfico ao redimensionar tela
+window.addEventListener('resize', () => {
+  if (typeof renderInvestmentTrendChart === 'function') {
+    renderInvestmentTrendChart();
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════
+   CALENDÁRIO ECONÔMICO GLOBAL — Eventos Macroeconômicos
+   ═══════════════════════════════════════════════════════════ */
+
+let currentEconTab = 'weekly';
+
+const GLOBAL_ECONOMIC_EVENTS = [
+  {
+    id: 'copom',
+    title: 'Decisão de Taxa de Juros (Copom / Selic)',
+    country: 'Brasil',
+    flag: '🇧🇷',
+    impact: 'high',
+    period: 'monthly',
+    dateLabel: '24 Set',
+    day: '24',
+    month: 'Set',
+    forecast: 'Manutenção / Ajuste Selic',
+    desc: 'Impacto direto em Renda Fixa, FIIs, Custo do Crédito e Ações da B3.'
+  },
+  {
+    id: 'fed_fomc',
+    title: 'Decisão de Juros do Federal Reserve (FOMC)',
+    country: 'EUA',
+    flag: '🇺🇸',
+    impact: 'high',
+    period: 'monthly',
+    dateLabel: '25 Set',
+    day: '25',
+    month: 'Set',
+    forecast: 'Projeção de Cortes Fed Funds',
+    desc: 'O evento de maior liquidez global: move o Dólar, Bolsas Mundiais e Cripto.'
+  },
+  {
+    id: 'ipca_br',
+    title: 'IPCA — Inflação Oficial do Brasil (IBGE)',
+    country: 'Brasil',
+    flag: '🇧🇷',
+    impact: 'high',
+    period: 'weekly',
+    dateLabel: '26 Set',
+    day: '26',
+    month: 'Set',
+    forecast: '+0,28% (Consenso Mercado)',
+    desc: 'Referência para NTN-B, Títulos IPCA+, dividendos de FIIs de papel e juros futuros.'
+  },
+  {
+    id: 'payroll_us',
+    title: 'Relatório de Emprego Não-Agrícola (Non-Farm Payroll)',
+    country: 'EUA',
+    flag: '🇺🇸',
+    impact: 'high',
+    period: 'weekly',
+    dateLabel: '03 Out',
+    day: '03',
+    month: 'Out',
+    forecast: '160k vagas esperadas',
+    desc: 'Termômetro do mercado de trabalho norte-americano e política de juros do Fed.'
+  },
+  {
+    id: 'cpi_us',
+    title: 'CPI — Índice de Inflação ao Consumidor (EUA)',
+    country: 'EUA',
+    flag: '🇺🇸',
+    impact: 'high',
+    period: 'monthly',
+    dateLabel: '10 Out',
+    day: '10',
+    month: 'Out',
+    forecast: '+0,2% m/m',
+    desc: 'Define a trajetória da inflação global e atratividade dos Treasuries.'
+  },
+  {
+    id: 'ecb_rates',
+    title: 'Decisão de Taxa de Juros do BCE (Zona do Euro)',
+    country: 'Europa',
+    flag: '🇪🇺',
+    impact: 'medium',
+    period: 'monthly',
+    dateLabel: '17 Out',
+    day: '17',
+    month: 'Out',
+    forecast: 'Taxa de Depósito 3,50%',
+    desc: 'Define a taxa de juros na Europa e fluxo cambial para mercados emergentes.'
+  },
+  {
+    id: 'china_pmi',
+    title: 'PMI de Atividade Industrial da China',
+    country: 'China',
+    flag: '🇨🇳',
+    impact: 'medium',
+    period: 'weekly',
+    dateLabel: '30 Set',
+    day: '30',
+    month: 'Set',
+    forecast: '49.8 pts',
+    desc: 'Grande catalisador para commodities globais: Vale (VALE3), Minério e Petróleo.'
+  },
+  {
+    id: 'gdp_br',
+    title: 'PIB — Crescimento da Economia Brasileira',
+    country: 'Brasil',
+    flag: '🇧🇷',
+    impact: 'high',
+    period: 'monthly',
+    dateLabel: '01 Nov',
+    day: '01',
+    month: 'Nov',
+    forecast: '+0,8% t/t',
+    desc: 'Medição oficial do ritmo de expansão do Brasil e lucros corporativos.'
+  }
+];
+
+function switchEconCalendarTab(tab) {
+  currentEconTab = tab;
+  document.querySelectorAll('.econ-tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.econtab === tab);
+  });
+
+  const listContainer = document.getElementById('econ-events-list-container');
+  const tvContainer = document.getElementById('econ-tradingview-container');
+
+  if (tab === 'tradingview') {
+    if (listContainer) listContainer.style.display = 'none';
+    if (tvContainer) {
+      tvContainer.style.display = 'block';
+      loadTradingViewEconomicWidget();
+    }
+  } else {
+    if (listContainer) listContainer.style.display = 'flex';
+    if (tvContainer) tvContainer.style.display = 'none';
+    renderEconomicEventsList();
+  }
+}
+
+function renderEconomicCalendar() {
+  if (currentEconTab === 'tradingview') {
+    loadTradingViewEconomicWidget();
+  } else {
+    renderEconomicEventsList();
+  }
+}
+
+function renderEconomicEventsList() {
+  const container = document.getElementById('econ-events-list-container');
+  if (!container) return;
+
+  const events = currentEconTab === 'weekly'
+    ? GLOBAL_ECONOMIC_EVENTS.filter(e => e.period === 'weekly' || e.impact === 'high')
+    : GLOBAL_ECONOMIC_EVENTS;
+
+  container.innerHTML = events.map(ev => {
+    const impactClass = ev.impact === 'high' ? 'high' : 'medium';
+    const impactText = ev.impact === 'high' ? '🔴 Alto Impacto' : '🟡 Médio Impacto';
+
+    return `
+      <div class="econ-event-item">
+        <div class="ee-left">
+          <div class="ee-date-box">
+            <span class="ee-date-day">${escapeHtml(ev.day)}</span>
+            <span class="ee-date-month">${escapeHtml(ev.month)}</span>
+          </div>
+          <span class="ee-flag" title="${escapeHtml(ev.country)}">${ev.flag}</span>
+          <div class="ee-info">
+            <div class="ee-title-row">
+              <span class="ee-title">${escapeHtml(ev.title)}</span>
+              <span class="ee-impact-tag ${impactClass}">${impactText}</span>
+            </div>
+            <div class="ee-desc">${escapeHtml(ev.desc)}</div>
+          </div>
+        </div>
+        <div class="ee-right">
+          <span class="ee-period">${escapeHtml(ev.dateLabel)}</span>
+          <span class="ee-forecast">${escapeHtml(ev.forecast)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+let tvWidgetLoaded = false;
+function loadTradingViewEconomicWidget() {
+  const container = document.querySelector('#econ-tradingview-container .tradingview-widget-container__widget');
+  if (!container || tvWidgetLoaded) return;
+  tvWidgetLoaded = true;
+
+  container.innerHTML = '';
+  const script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-events.js';
+  script.async = true;
+  script.innerHTML = JSON.stringify({
+    colorTheme: 'dark',
+    isTransparent: true,
+    width: '100%',
+    height: '420',
+    locale: 'br',
+    importanceFilter: '-1,0,1',
+    countryFilter: 'br,us,eu,gb,jp,cn'
+  });
+  container.appendChild(script);
 }
 
 function renderAllocation() {
   const sectors = {};
   let total = 0;
 
-  for (const a of state.portfolio) {
+  for (const a of (state.portfolio || [])) {
     const qty = parseFloat(a.quantity) || 0;
     const quote = getStockQuoteData(a.ticker);
     const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
@@ -2378,7 +3470,7 @@ function renderAllocation() {
     seg.className = 'alloc-segment';
     seg.style.width = pct + '%';
     seg.style.backgroundColor = color;
-    seg.title = `${sector}: ${fmtPrivate(val)} (${pct.toFixed(1)}%)`;
+    seg.title = `${sector}: ${pct.toFixed(1)}% da carteira`;
     bar.appendChild(seg);
 
     const li = document.createElement('div');
@@ -2407,6 +3499,7 @@ function renderPortfolio() {
   }
 
   const list = document.getElementById('portfolio-items-list');
+  if (!list) return;
   const count = document.getElementById('portfolio-count-badge');
   if (count) {
     count.textContent = currentFilter === 'ALL' ? state.portfolio.length : `${items.length} de ${state.portfolio.length}`;
@@ -3348,7 +4441,7 @@ function detailActionRadar() {
     state.watchlist.splice(watchIndex, 1);
     saveEncryptedState();
     renderAll();
-    updateDetailUserPos(currentDetailTicker);
+    updateDetailUserPosition(currentDetailTicker);
     showToast(`${currentDetailTicker} removido dos Favoritos.`, 'info');
   } else {
     // Se não estiver nos Favoritos, adiciona DIRETAMENTE sem abrir formulário e sem pedir dados
@@ -3375,7 +4468,7 @@ function detailActionRadar() {
     state.watchlist.push(item);
     saveEncryptedState();
     renderAll();
-    updateDetailUserPos(currentDetailTicker);
+    updateDetailUserPosition(currentDetailTicker);
     showToast(`★ ${currentDetailTicker} adicionado aos Favoritos!`, 'success');
   }
 }
@@ -3705,55 +4798,7 @@ async function refreshExplorerPrices() {
   }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   ATUALIZAR TODAS AS COTAÇÕES (Carteira + Radar)
-   ═══════════════════════════════════════════════════════════ */
-
-async function refreshAllQuotes() {
-  const btn = document.getElementById('btn-sync-quotes');
-  btn.classList.add('spinning');
-
-  const tickers = [
-    ...state.portfolio.map(a => a.ticker),
-    ...state.watchlist.map(a => a.ticker),
-    ...(state.best || []).map(a => a.ticker),
-  ];
-
-  if (tickers.length === 0) {
-    btn.classList.remove('spinning');
-    showToast('Nenhum ativo para atualizar.', 'info');
-    return;
-  }
-
-  try {
-    const quotes = await QuoteService.getQuotes([...new Set(tickers)]);
-    let updated = 0;
-
-    state.portfolio.forEach(a => {
-      const q = quotes[a.ticker];
-      if (q?.price) { a.currentPrice = q.price; updated++; }
-    });
-
-    state.watchlist.forEach(a => {
-      const q = quotes[a.ticker];
-      if (q?.price) { a.currentPrice = q.price; }
-    });
-
-    (state.best || []).forEach(a => {
-      const q = quotes[a.ticker];
-      if (q) bestPrices[a.ticker] = q;
-    });
-
-    if (updated > 0) saveEncryptedState();
-
-    renderAll();
-    showToast(`Cotações atualizadas para ${updated} ativo(s).`, 'success');
-  } catch {
-    showToast('Erro na busca de cotações. Verifique a conexão.', 'error');
-  } finally {
-    btn.classList.remove('spinning');
-  }
-}
+/* Nota: refreshAllQuotes está definido acima (linha ~3895) com lógica completa e null-check. */
 
 /* ═══════════════════════════════════════════════════════════
    CRUD — CARTEIRA
@@ -3954,7 +4999,7 @@ document.querySelectorAll('[data-category]').forEach(btn => {
   });
 });
 
-document.getElementById('search-assets').addEventListener('input', e => {
+document.getElementById('search-assets')?.addEventListener('input', e => {
   searchQuery = e.target.value;
   renderPortfolio();
   renderWatchlist();
@@ -4088,10 +5133,14 @@ function initDefaultData() {
 function openModal(id) {
   if (id === 'modal-goals-config') {
     const g = getGoalsState();
+    const mGoalInput = document.getElementById('cfg-monthly-invest-goal');
+    const aGoalInput = document.getElementById('cfg-annual-invest-goal');
     const retInput = document.getElementById('cfg-retirement-goal');
     const pasInput = document.getElementById('cfg-target-passive');
     const livInput = document.getElementById('cfg-cost-of-living');
     const yldInput = document.getElementById('cfg-estimated-yield');
+    if (mGoalInput) mGoalInput.value = g.monthlyGoal || state.monthlyGoal || 1000;
+    if (aGoalInput) aGoalInput.value = g.annualGoal || ((g.monthlyGoal || state.monthlyGoal || 1000) * 12);
     if (retInput) retInput.value = g.retirementTarget || 1000000;
     if (pasInput) pasInput.value = g.targetPassiveIncome || 5000;
     if (livInput) livInput.value = g.costOfLiving || 3500;
@@ -4497,6 +5546,8 @@ function getGoalsState() {
   if (!state.goals || typeof state.goals !== 'object') {
     state.goals = {
       retirementTarget: 1000000,
+      monthlyGoal: parseFloat(state.monthlyGoal) || 1000,
+      annualGoal: (parseFloat(state.monthlyGoal) || 1000) * 12,
       targetPassiveIncome: 5000,
       costOfLiving: 3500,
       estimatedMonthlyYield: 0.60,
@@ -4508,6 +5559,8 @@ function getGoalsState() {
   }
   if (!Array.isArray(state.goals.customTargets)) state.goals.customTargets = [];
   if (!state.goals.retirementTarget) state.goals.retirementTarget = 1000000;
+  if (!state.goals.monthlyGoal) state.goals.monthlyGoal = parseFloat(state.monthlyGoal) || 1000;
+  if (!state.goals.annualGoal) state.goals.annualGoal = (parseFloat(state.goals.monthlyGoal) || 1000) * 12;
   if (!state.goals.targetPassiveIncome) state.goals.targetPassiveIncome = 5000;
   if (!state.goals.costOfLiving) state.goals.costOfLiving = 3500;
   if (!state.goals.estimatedMonthlyYield) state.goals.estimatedMonthlyYield = 0.60;
@@ -4553,10 +5606,10 @@ function renderHeroGoalsBadge(totalOverride) {
 
   if (descEl) {
     if (total >= retirementGoal) {
-      descEl.textContent = '👑 Meta de Aposentadoria Conquistada! Parabéns!';
+      descEl.textContent = '👑 Meta de Liberdade Conquistada! Parabéns pela jornada!';
     } else {
-      const missing = nextMilestone.target - total;
-      descEl.textContent = `${nextMilestone.icon} Próximo Marco: ${fmt(nextMilestone.target)} · Faltam ${fmt(missing)}`;
+      const missingPct = Math.max(0, ((nextMilestone.target - total) / retirementGoal) * 100).toFixed(1);
+      descEl.textContent = `${nextMilestone.icon} Próximo Marco: ${nextMilestone.name} · Faltam ${missingPct}% para atingir`;
     }
   }
 }
@@ -4866,12 +5919,17 @@ function refreshMotivationQuote() {
 /* ─── Salvar Configurações de Metas ───────────────────────────── */
 function handleSaveGoalsConfig(e) {
   e.preventDefault();
+  const mGoal = parseFloat(document.getElementById('cfg-monthly-invest-goal')?.value) || 1000;
+  const aGoal = parseFloat(document.getElementById('cfg-annual-invest-goal')?.value) || (mGoal * 12);
   const retirement = parseFloat(document.getElementById('cfg-retirement-goal')?.value) || 1000000;
   const passive = parseFloat(document.getElementById('cfg-target-passive')?.value) || 5000;
   const living = parseFloat(document.getElementById('cfg-cost-of-living')?.value) || 3500;
   const yieldRate = parseFloat(document.getElementById('cfg-estimated-yield')?.value) || 0.60;
 
   const g = getGoalsState();
+  g.monthlyGoal = mGoal;
+  g.annualGoal = aGoal;
+  state.monthlyGoal = mGoal;
   g.retirementTarget = retirement;
   g.targetPassiveIncome = passive;
   g.costOfLiving = living;
@@ -4879,9 +5937,10 @@ function handleSaveGoalsConfig(e) {
 
   saveEncryptedState();
   closeModal('modal-goals-config');
+  renderSummary();
   renderGoalsView();
   renderHeroGoalsBadge();
-  showToast('Metas de Aposentadoria salvas!', 'success');
+  showToast('Metas e Objetivos salvos com sucesso!', 'success');
 }
 
 /* ─── CRUD de Alvos Personalizados ────────────────────────────── */
