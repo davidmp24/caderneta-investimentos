@@ -901,25 +901,17 @@ function exportPortfolioCSV() {
   const header = ['Ticker','Nome','Tipo','Quantidade','Preço Médio','Preço Atual','Total Investido','Valor Atual','P&L R$','P&L %','Notas'];
   const rows = [header];
 
-  state.portfolio.forEach(a => {
-    const qty = parseFloat(a.quantity) || 0;
-    const avg = parseFloat(a.avgPrice) || 0;
-    const quote = getStockQuoteData(a.ticker);
-    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
-      ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
-    const inv = qty * avg;
-    const atl = qty * cur;
-    const pnl = atl - inv;
-    const pct = inv > 0 ? (pnl / inv) * 100 : 0;
+  (state.portfolio || []).forEach(a => {
+    const eff = getAssetEffectiveValues(a);
     rows.push([
       a.ticker, a.name || '', a.type,
-      qty.toString().replace('.', ','),
-      avg.toFixed(2).replace('.', ','),
-      cur.toFixed(2).replace('.', ','),
-      inv.toFixed(2).replace('.', ','),
-      atl.toFixed(2).replace('.', ','),
-      pnl.toFixed(2).replace('.', ','),
-      pct.toFixed(2).replace('.', ',') + '%',
+      eff.qty.toString().replace('.', ','),
+      eff.avgPrice.toFixed(2).replace('.', ','),
+      eff.currentPrice.toFixed(2).replace('.', ','),
+      eff.invested.toFixed(2).replace('.', ','),
+      eff.currentTotal.toFixed(2).replace('.', ','),
+      eff.pnl.toFixed(2).replace('.', ','),
+      eff.pnlPct.toFixed(2).replace('.', ',') + '%',
       (a.notes || '').replace(/;/g, ' '),
     ]);
   });
@@ -1269,7 +1261,7 @@ const QuoteService = {
     if (!symbols || !symbols.length) return {};
     const result = {};
 
-    // Cache da taxa USDT→BRL por 10 minutos para evitar requisições extras
+    // Cache da taxa USDT→BRL por 10 minutos
     const now = Date.now();
     if (!this._usdtBrlTs || (now - this._usdtBrlTs) > 600000) {
       try {
@@ -1283,91 +1275,108 @@ const QuoteService = {
     }
     const usdtBrlRate = this._usdtBrl || 5.85;
 
-    // Montar pares: preferir BRL direto; se não existir, usar USDT e converter
-    const brlPairs = [];
-    const usdtPairs = [];
-    const symbolOfBrl  = {}; // "BTCBRL"  -> "BTC"
-    const symbolOfUsdt = {}; // "BTCUSDT" -> "BTC"
+    const cryptoNameMap = {
+      'BITCOIN': 'BTC',
+      'ETHEREUM': 'ETH',
+      'SOLANA': 'SOL',
+      'CARDANO': 'ADA',
+      'DOGECOIN': 'DOGE',
+      'RIPPLE': 'XRP',
+      'TETHER': 'USDT'
+    };
 
     for (const raw of symbols) {
-      const clean = raw.toUpperCase().trim().replace(/USDT$|BRL$|BTC$/, '');
-      const sym = clean || raw.toUpperCase().trim();
-      brlPairs.push(`${sym}BRL`);
-      usdtPairs.push(`${sym}USDT`);
-      symbolOfBrl[`${sym}BRL`]  = raw.toUpperCase().trim();
-      symbolOfUsdt[`${sym}USDT`] = raw.toUpperCase().trim();
-    }
+      const cleanRaw = raw.toUpperCase().trim();
+      const mapped = cryptoNameMap[cleanRaw] || cleanRaw;
+      const clean = mapped.replace(/USDT$|BRL$|BTC$/, '') || mapped;
+      const original = cleanRaw;
 
-    try {
-      // Uma única requisição batch com todos os pares BRL
-      const qs = encodeURIComponent(JSON.stringify([...new Set(brlPairs)]));
-      const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${qs}`,
-        { signal: AbortSignal.timeout(5000) });
+      let fetched = false;
 
-      const foundSymbols = new Set();
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          for (const t of data) {
-            const original = symbolOfBrl[t.symbol];
-            if (!original) continue;
-            const price = parseFloat(t.lastPrice);
-            if (!price) continue;
+      // 1. Tentar primeiro par direto BRL na Binance (ex: BTCBRL)
+      try {
+        const rBrl = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${clean}BRL`, { signal: AbortSignal.timeout(4000) });
+        if (rBrl.ok) {
+          const d = await rBrl.json();
+          const price = parseFloat(d.lastPrice);
+          if (price > 0) {
             result[original] = {
               price,
-              change: parseFloat(t.priceChangePercent),
-              changePercent: parseFloat(t.priceChangePercent),
+              change: parseFloat(d.priceChangePercent) || 0,
+              changePercent: parseFloat(d.priceChangePercent) || 0,
               name: `${original} (Binance)`,
               isClosed: false,
             };
-            foundSymbols.add(original);
+            fetched = true;
           }
         }
+      } catch {}
+
+      // 2. Se não encontrou BRL, tentar par USDT e converter com taxa de câmbio
+      if (!fetched) {
+        try {
+          const rUsdt = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${clean}USDT`, { signal: AbortSignal.timeout(4000) });
+          if (rUsdt.ok) {
+            const d = await rUsdt.json();
+            const priceUsdt = parseFloat(d.lastPrice);
+            if (priceUsdt > 0) {
+              result[original] = {
+                price: priceUsdt * usdtBrlRate,
+                change: parseFloat(d.priceChangePercent) || 0,
+                changePercent: parseFloat(d.priceChangePercent) || 0,
+                name: `${original} (Binance)`,
+                isClosed: false,
+              };
+              fetched = true;
+            }
+          }
+        } catch {}
       }
 
-      // Para símbolos sem par BRL, tentar USDT e converter
-      const missingSymbols = symbols.filter(s => !foundSymbols.has(s.toUpperCase().trim()));
-      if (missingSymbols.length > 0) {
-        const missingPairs = missingSymbols.map(s => {
-          const clean = s.toUpperCase().trim().replace(/USDT$|BRL$|BTC$/, '') || s.toUpperCase().trim();
-          return `${clean}USDT`;
-        });
-        try {
-          const qs2 = encodeURIComponent(JSON.stringify([...new Set(missingPairs)]));
-          const res2 = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${qs2}`,
-            { signal: AbortSignal.timeout(4000) });
-          if (res2.ok) {
-            const data2 = await res2.json();
-            if (Array.isArray(data2)) {
-              for (const t of data2) {
-                const original = symbolOfUsdt[t.symbol];
-                if (!original || result[original]) continue;
-                const price = parseFloat(t.lastPrice) * usdtBrlRate;
-                if (!price) continue;
+      // 3. Fallback com proxies CORS caso a requisição direta seja bloqueada
+      if (!fetched) {
+        for (const proxy of CORS_PROXIES) {
+          try {
+            const targetUrl = `https://api.binance.com/api/v3/ticker/price?symbol=${clean}BRL`;
+            const rProxy = await fetch(`${proxy}${encodeURIComponent(targetUrl)}`, { signal: AbortSignal.timeout(4000) });
+            if (rProxy.ok) {
+              const text = await rProxy.text();
+              const d = JSON.parse(text.contents || text);
+              const price = parseFloat(d?.price);
+              if (price > 0) {
                 result[original] = {
                   price,
-                  change: parseFloat(t.priceChangePercent),
-                  changePercent: parseFloat(t.priceChangePercent),
+                  change: 0,
+                  changePercent: 0,
                   name: `${original} (Binance)`,
                   isClosed: false,
                 };
+                fetched = true;
+                break;
               }
             }
-          }
-        } catch { /* ignora pares USDT não encontrados */ }
+          } catch {}
+        }
       }
-    } catch (e) {
-      console.warn('Erro ao consultar Binance API:', e);
     }
 
     return result;
   },
 
-
   isCryptoSymbol(ticker) {
     const clean = (ticker || '').toUpperCase().trim();
-    // Parênteses obrigatórios: && tem precedência maior que ||
+    const cryptoNameMap = {
+      'BITCOIN': 'BTC',
+      'ETHEREUM': 'ETH',
+      'SOLANA': 'SOL',
+      'CARDANO': 'ADA',
+      'DOGECOIN': 'DOGE',
+      'RIPPLE': 'XRP',
+      'TETHER': 'USDT'
+    };
+    const mapped = cryptoNameMap[clean] || clean;
     return KNOWN_CRYPTO_LIST.includes(clean) ||
+           KNOWN_CRYPTO_LIST.includes(mapped) ||
            clean.endsWith('USDT') ||
            (clean.endsWith('BRL') && !clean.match(/^\w{4}\d{1,2}/));
   },
@@ -1519,20 +1528,67 @@ function switchMiTab(tab) {
   renderMiKpis();
 }
 
+/**
+ * Retorna valores normalizados e consistentes de um ativo na carteira:
+ * - qty: Quantidade de cotas/frações
+ * - avgPrice: Preço médio unitário de aquisição (em BRL)
+ * - currentPrice: Preço unitário de mercado atualizado (em BRL)
+ * - invested: Total investido (R$)
+ * - currentTotal: Posição patrimonial atual (R$)
+ * - pnl: Lucro/prejuízo em R$
+ * - pnlPct: Rendimento percentual real (%)
+ */
+function getAssetEffectiveValues(a) {
+  if (!a) return { qty: 0, avgPrice: 0, currentPrice: 0, invested: 0, currentTotal: 0, pnl: 0, pnlPct: 0 };
+
+  const qty = parseFloat(a.quantity) || 0;
+  let avg = parseFloat(a.avgPrice) || 0;
+  const quote = getStockQuoteData(a.ticker);
+
+  // Priorizar cotação de mercado atualizada da Binance/Yahoo; se indisponível, usar a.currentPrice
+  let cur = (quote?.price != null && parseFloat(quote.price) > 0)
+    ? parseFloat(quote.price)
+    : ((a.currentPrice != null && parseFloat(a.currentPrice) > 0) ? parseFloat(a.currentPrice) : avg);
+
+  // Detecção e correção automática de inconsistência cambial (USD vs BRL) em criptoativos:
+  // Se o preço médio unitário foi cadastrado em dólares (ex: BTC a US$ 65.000) e a cotação atual está em reais (R$ 380.000+),
+  // detectamos a escala cambial (fator ~3.8x a 7.5x) para evitar o salto fantasma de +400% a +500%.
+  const isCrypto = a.type === 'CRYPTO' || (typeof QuoteService !== 'undefined' && QuoteService.isCryptoSymbol(a.ticker));
+  if (isCrypto && cur > 0 && avg > 0) {
+    const usdtRate = (typeof QuoteService !== 'undefined' && QuoteService._usdtBrl) ? QuoteService._usdtBrl : 5.85;
+    const ratio = cur / avg;
+    if (ratio >= 3.8 && ratio <= 7.5) {
+      // O preço médio foi cadastrado na moeda base USD. Normaliza para BRL:
+      avg = avg * usdtRate;
+    }
+  }
+
+  const invested = qty * avg;
+  const currentTotal = qty * cur;
+  const pnl = currentTotal - invested;
+  const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+
+  return {
+    qty,
+    avgPrice: avg,
+    currentPrice: cur,
+    invested,
+    currentTotal,
+    pnl,
+    pnlPct
+  };
+}
+
 /* ── KPIs do cabeçalho ── */
 function renderMiKpis() {
   const assets = state.portfolio || [];
   let totalInv = 0, totalCur = 0, opsCount = 0;
 
   assets.forEach(a => {
-    const quote = getStockQuoteData(a.ticker);
-    const qty   = parseFloat(a.quantity) || 0;
-    const avg   = parseFloat(a.avgPrice) || 0;
-    const cur   = a.currentPrice != null && parseFloat(a.currentPrice) > 0
-      ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
-    totalInv += qty * avg;
-    totalCur += qty * cur;
-    opsCount += Array.isArray(a.transactions) ? a.transactions.length : (qty > 0 ? 1 : 0);
+    const eff = getAssetEffectiveValues(a);
+    totalInv += eff.invested;
+    totalCur += eff.currentTotal;
+    opsCount += Array.isArray(a.transactions) ? a.transactions.length : (eff.qty > 0 ? 1 : 0);
   });
 
   const plVal = totalCur - totalInv;
@@ -1629,19 +1685,54 @@ function renderMiExtrato() {
       const tPrice = parseFloat(op.price) || 0;
       const tTotal = op.total != null ? parseFloat(op.total) : tQty * tPrice;
 
+      const quote = getStockQuoteData(op.ticker);
+      const curPrice = (quote?.price != null && parseFloat(quote.price) > 0)
+        ? parseFloat(quote.price)
+        : tPrice;
+
+      const currentTotal = tQty * curPrice;
+      const pnlVal = isBuy ? (currentTotal - tTotal) : 0;
+      const pnlPct = (isBuy && tTotal > 0) ? (pnlVal / tTotal) * 100 : 0;
+      const pnlClass = pnlVal > 0 ? 'pos' : (pnlVal < 0 ? 'neg' : '');
+      const pnlSign = pnlVal >= 0 ? '+' : '';
+
       html += `
       <div class="mi-feed-item">
         <div class="mi-feed-item-left">
-          <div class="mi-feed-op-badge ${isBuy ? 'buy' : 'sell'}">${isBuy ? '▲' : '▼'}</div>
+          <div class="mi-feed-op-badge ${isBuy ? 'buy' : 'sell'}">${isBuy ? '▲ Compra' : '▼ Venda'}</div>
           <div class="mi-feed-item-logo">${renderAssetLogoHtml(op.ticker, 'asset-logo-sm')}</div>
           <div class="mi-feed-item-info">
-            <div class="mi-feed-item-ticker" onclick="openAssetDetail('${op.ticker}')">${escapeHtml(op.ticker)}</div>
-            <div class="mi-feed-item-sub">${escapeHtml(op.assetName)} · <span class="${isBuy ? 'text-buy' : 'text-sell'}">${isBuy ? 'Compra' : 'Venda'}</span></div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="mi-feed-item-ticker" onclick="openAssetDetail('${op.ticker}')">${escapeHtml(op.ticker)}</span>
+              <span class="asset-category-badge cat-${(op.assetType||'').toLowerCase()}" style="font-size:0.6rem;padding:2px 5px;">${op.assetType || 'AÇÃO'}</span>
+            </div>
+            <div class="mi-feed-item-sub">${escapeHtml(op.assetName)}</div>
           </div>
         </div>
+
+        <div class="mi-feed-item-mid">
+          <span class="mi-feed-col-label">Cotas / Preço Pago</span>
+          <div class="mi-feed-qty-val"><strong>${tQty.toLocaleString('pt-BR')}</strong> cota${tQty !== 1 ? 's' : ''} × ${fmtCurrency(tPrice)}</div>
+          <div class="mi-feed-total-sub">Aporte: ${fmtCurrency(tTotal)}</div>
+        </div>
+
         <div class="mi-feed-item-right">
-          <div class="mi-feed-item-qty">${tQty.toLocaleString('pt-BR')} ${tQty === 1 ? 'cota' : 'cotas'} × ${fmtCurrency(tPrice)}</div>
-          <div class="mi-feed-item-total ${isBuy ? 'buy' : 'sell'}">${isBuy ? '−' : '+'} ${fmtCurrency(tTotal)}</div>
+          <span class="mi-feed-col-label">${isBuy ? 'Ganhos / Desempenho' : 'Valor Liquidado'}</span>
+          ${isBuy ? `
+            <div class="mi-feed-pnl-row">
+              <span class="mi-feed-pnl-val ${pnlClass}">${pnlSign}${fmtCurrency(pnlVal)}</span>
+              <span class="badge-profit ${pnlVal >= 0 ? 'positive' : 'negative'}" style="font-size:0.75rem;padding:2px 7px;">
+                ${pnlSign}${pnlPct.toFixed(2)}%
+              </span>
+            </div>
+            <div class="mi-feed-cur-sub">Cotação Atual: <strong>${fmtCurrency(curPrice)}</strong></div>
+          ` : `
+            <div class="mi-feed-pnl-row">
+              <span class="mi-feed-pnl-val pos">+ ${fmtCurrency(tTotal)}</span>
+              <span class="badge-profit positive" style="font-size:0.75rem;padding:2px 7px;">Liquidado</span>
+            </div>
+            <div class="mi-feed-cur-sub">Valor de Venda Recebido</div>
+          `}
         </div>
       </div>`;
     });
@@ -1668,14 +1759,9 @@ function renderMiDesempenho() {
   // 1. Distribuição por categoria (donut simples por legendas)
   const catMap = {};
   assets.forEach(a => {
-    const quote    = getStockQuoteData(a.ticker);
-    const qty      = parseFloat(a.quantity) || 0;
-    const avg      = parseFloat(a.avgPrice) || 0;
-    const cur      = a.currentPrice != null && parseFloat(a.currentPrice) > 0
-      ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
-    const val = qty * cur;
+    const eff = getAssetEffectiveValues(a);
     if (!catMap[a.type]) catMap[a.type] = 0;
-    catMap[a.type] += val;
+    catMap[a.type] += eff.currentTotal;
   });
 
   const totalCur = Object.values(catMap).reduce((s, v) => s + v, 0);
@@ -1709,16 +1795,8 @@ function renderMiDesempenho() {
 
   // 2. Melhores e piores ativos por P&L %
   const ranked = assets.map(a => {
-    const quote = getStockQuoteData(a.ticker);
-    const qty   = parseFloat(a.quantity) || 0;
-    const avg   = parseFloat(a.avgPrice) || 0;
-    const cur   = a.currentPrice != null && parseFloat(a.currentPrice) > 0
-      ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
-    const inv   = qty * avg;
-    const now   = qty * cur;
-    const plVal = now - inv;
-    const plPct = inv > 0 ? (plVal / inv) * 100 : 0;
-    return { ticker: a.ticker, plVal, plPct, inv };
+    const eff = getAssetEffectiveValues(a);
+    return { ticker: a.ticker, plVal: eff.pnl, plPct: eff.pnlPct, inv: eff.invested, curTotal: eff.currentTotal };
   }).filter(r => r.inv > 0);
 
   ranked.sort((a, b) => b.plPct - a.plPct);
@@ -1751,17 +1829,8 @@ function renderMiDesempenho() {
   }
 
   // 3. Resumo Financeiro Detalhado
-  let totalInv = 0;
-  ranked.forEach(r => totalInv += r.inv);
-  const totalCurAll = ranked.reduce((s, r) => {
-    const a   = (state.portfolio || []).find(x => x.ticker === r.ticker);
-    const q   = getStockQuoteData(r.ticker);
-    const qty = parseFloat(a?.quantity) || 0;
-    const avg = parseFloat(a?.avgPrice) || 0;
-    const cur = a?.currentPrice != null && parseFloat(a.currentPrice) > 0
-      ? parseFloat(a.currentPrice) : (q?.price ?? avg);
-    return s + qty * cur;
-  }, 0);
+  const totalInv = ranked.reduce((s, r) => s + r.inv, 0);
+  const totalCurAll = ranked.reduce((s, r) => s + r.curTotal, 0);
   const plTotalVal = totalCurAll - totalInv;
   const plTotalPct = totalInv > 0 ? (plTotalVal / totalInv) * 100 : 0;
   const positive = ranked.filter(r => r.plVal >= 0);
@@ -1771,7 +1840,7 @@ function renderMiDesempenho() {
   if (perfEl) {
     perfEl.innerHTML = `
       <div class="mi-perf-stat"><span class="mi-perf-stat-label">Total Aportado</span><span class="mi-perf-stat-val">${fmtCurrency(totalInv)}</span></div>
-      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Patrimônio Atual</span><span class="mi-perf-stat-val">${fmtCurrency(totalCurAll)}</span></div>
+      <div class="mi-perf-stat"><span class="mi-perf-stat-label">Patrimônio Atual</span><span class="mi-perf-stat-val ${plTotalVal > 0 ? 'pos' : plTotalVal < 0 ? 'neg' : ''}">${fmtCurrency(totalCurAll)}</span></div>
       <div class="mi-perf-stat"><span class="mi-perf-stat-label">Resultado (P&L)</span><span class="mi-perf-stat-val ${plTotalVal >= 0 ? 'pos' : 'neg'}">${plTotalVal >= 0 ? '+' : ''}${fmtCurrency(plTotalVal)}</span></div>
       <div class="mi-perf-stat"><span class="mi-perf-stat-label">Rentabilidade Total</span><span class="mi-perf-stat-val ${plTotalVal >= 0 ? 'pos' : 'neg'}">${plTotalVal >= 0 ? '+' : ''}${plTotalPct.toFixed(2)}%</span></div>
       <div class="mi-perf-stat"><span class="mi-perf-stat-label">Ativos em Ganho</span><span class="mi-perf-stat-val pos">${positive.length} ativo${positive.length !== 1 ? 's' : ''}</span></div>
@@ -1787,8 +1856,6 @@ function setReportMode(mode) {
   currentReportMode = mode;
   renderReports();
 }
-
-
 
 function formatDatePtBr(dateStr) {
   if (!dateStr) return '—';
@@ -1845,23 +1912,24 @@ function renderReports() {
   let rows = [];
 
   if (source !== 'watchlist') {
-    state.portfolio.forEach(a => {
+    (state.portfolio || []).forEach(a => {
       if (assetFilter !== 'ALL' && a.ticker !== assetFilter) return;
-      const quote   = getStockQuoteData(a.ticker);
-      const qty     = parseFloat(a.quantity) || 0;
-      const avg     = parseFloat(a.avgPrice) || 0;
-      const cur     = a.currentPrice != null && parseFloat(a.currentPrice) > 0
-        ? parseFloat(a.currentPrice)
-        : (quote?.price ?? avg);
-      const totalInv = qty * avg;
-      const totalCur = qty * cur;
-      const plVal   = totalCur - totalInv;
-      const plPct   = totalInv > 0 ? (plVal / totalInv) * 100 : 0;
+      const eff = getAssetEffectiveValues(a);
       rows.push({
         id: a.id,
-        ticker: a.ticker, name: a.name || '', type: a.type,
-        qty, avg, cur, totalInv, totalCur, plVal, plPct,
-        targetPrice: null, rank: null, notes: a.notes || '',
+        ticker: a.ticker,
+        name: a.name || '',
+        type: a.type,
+        qty: eff.qty,
+        avg: eff.avgPrice,
+        cur: eff.currentPrice,
+        totalInv: eff.invested,
+        totalCur: eff.currentTotal,
+        plVal: eff.pnl,
+        plPct: eff.pnlPct,
+        targetPrice: null,
+        rank: null,
+        notes: a.notes || '',
         source: 'Carteira',
         date: a.date || null
       });
@@ -1869,18 +1937,27 @@ function renderReports() {
   }
 
   if (source !== 'portfolio') {
-    state.watchlist.forEach(a => {
+    (state.watchlist || []).forEach(a => {
       if (assetFilter !== 'ALL' && a.ticker !== assetFilter) return;
       const quote = getStockQuoteData(a.ticker);
-      const cur   = a.currentPrice != null && parseFloat(a.currentPrice) > 0
-        ? parseFloat(a.currentPrice)
-        : (quote?.price ?? null);
+      const cur = (quote?.price != null && parseFloat(quote.price) > 0)
+        ? parseFloat(quote.price)
+        : ((a.currentPrice != null && parseFloat(a.currentPrice) > 0) ? parseFloat(a.currentPrice) : null);
       rows.push({
         id: a.id,
-        ticker: a.ticker, name: a.name || '', type: a.type,
-        qty: null, avg: null, cur, totalInv: null, totalCur: null, plVal: null, plPct: null,
+        ticker: a.ticker,
+        name: a.name || '',
+        type: a.type,
+        qty: null,
+        avg: null,
+        cur,
+        totalInv: null,
+        totalCur: null,
+        plVal: null,
+        plPct: null,
         targetPrice: parseFloat(a.targetPrice) || null,
-        rank: a.rank || null, notes: a.notes || '',
+        rank: a.rank || null,
+        notes: a.notes || '',
         source: 'Favoritos',
         date: a.date || null
       });
@@ -1909,7 +1986,7 @@ function renderReports() {
   const totalCur = portRows.reduce((s, r) => s + (r.totalCur || 0), 0);
   const plTotal  = totalCur - totalInv;
   const plPct    = totalInv > 0 ? (plTotal / totalInv) * 100 : 0;
-  const plClass  = plTotal >= 0 ? 'pos' : 'neg';
+  const plClass  = plTotal > 0 ? 'pos' : (plTotal < 0 ? 'neg' : '');
 
   const summaryEl = document.getElementById('reports-summary-row');
   if (summaryEl) {
@@ -1920,7 +1997,7 @@ function renderReports() {
       </div>
       <div class="report-summary-card">
         <div class="rsc-label">Valor Atual</div>
-        <div class="rsc-value">${fmtCurrency(totalCur)}</div>
+        <div class="rsc-value ${plClass}">${fmtCurrency(totalCur)}</div>
       </div>
       <div class="report-summary-card">
         <div class="rsc-label">P&amp;L Total</div>
@@ -1944,7 +2021,7 @@ function renderReports() {
   }
 
   tbody.innerHTML = rows.map(r => {
-    const plClass = r.plVal == null ? '' : r.plVal >= 0 ? 'pos' : 'neg';
+    const plClass = r.plVal == null ? '' : (r.plVal > 0 ? 'pos' : (r.plVal < 0 ? 'neg' : ''));
     const rankHtml = r.rank
       ? `<span class="rank-badge rank-${r.rank <= 3 ? r.rank : 'n'}">#${r.rank}</span>`
       : '<span style="color:var(--text-muted)">—</span>';
@@ -1952,14 +2029,14 @@ function renderReports() {
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px;">${renderAssetLogoHtml(r.ticker,'table-asset-logo')}<div><strong style="cursor:pointer;" onclick="openAssetDetail('${r.ticker}')">${escapeHtml(r.ticker)}</strong><div style="font-size:0.7rem;color:var(--text-muted);">${escapeHtml(r.name)}</div></div>${srcBadge}</div></td>
       <td><span class="asset-category-badge cat-${(r.type||'').toLowerCase()}">${r.type}</span></td>
-      <td class="num">${r.qty != null ? r.qty : '—'}</td>
-      <td class="num">${r.avg != null ? fmtN(r.avg) : '—'}</td>
-      <td class="num">${r.cur != null ? fmtN(r.cur) : '—'}</td>
+      <td class="num">${r.qty != null ? r.qty.toLocaleString('pt-BR') : '—'}</td>
+      <td class="num">${r.avg != null ? fmtCurrency(r.avg) : '—'}</td>
+      <td class="num">${r.cur != null ? fmtCurrency(r.cur) : '—'}</td>
       <td class="num">${r.totalInv != null ? fmtCurrency(r.totalInv) : '—'}</td>
-      <td class="num">${r.totalCur != null ? fmtCurrency(r.totalCur) : '—'}</td>
+      <td class="num ${plClass}">${r.totalCur != null ? fmtCurrency(r.totalCur) : '—'}</td>
       <td class="num ${plClass}">${r.plVal != null ? (r.plVal >= 0 ? '+' : '') + fmtCurrency(r.plVal) : '—'}</td>
       <td class="num ${plClass}">${r.plPct != null ? (r.plPct >= 0 ? '+' : '') + r.plPct.toFixed(2) + '%' : '—'}</td>
-      <td class="num">${r.targetPrice != null ? fmtN(r.targetPrice) : '—'}</td>
+      <td class="num">${r.targetPrice != null ? fmtCurrency(r.targetPrice) : '—'}</td>
       <td style="text-align:center;">${rankHtml}</td>
       <td class="report-notes-cell" title="${escapeHtml(r.notes)}">${r.notes ? escapeHtml(r.notes.slice(0, 40)) + (r.notes.length > 40 ? '…' : '') : '<span style="color:var(--text-muted)">—</span>'}</td>
     </tr>`;
@@ -1986,15 +2063,15 @@ function renderReportsHistory(assetFilter = 'ALL', typeFilter = 'ALL') {
   }
 
   container.innerHTML = assets.map(a => {
-    const quote = getStockQuoteData(a.ticker);
-    const qty   = parseFloat(a.quantity) || 0;
-    const avg   = parseFloat(a.avgPrice) || 0;
-    const cur   = a.currentPrice != null && parseFloat(a.currentPrice) > 0 ? parseFloat(a.currentPrice) : (quote?.price ?? avg);
-    const totalInv = qty * avg;
-    const totalCur = qty * cur;
-    const plVal = totalCur - totalInv;
-    const plPct = totalInv > 0 ? (plVal / totalInv) * 100 : 0;
-    const plClass = plVal >= 0 ? 'pos' : 'neg';
+    const eff = getAssetEffectiveValues(a);
+    const qty = eff.qty;
+    const avg = eff.avgPrice;
+    const cur = eff.currentPrice;
+    const totalInv = eff.invested;
+    const totalCur = eff.currentTotal;
+    const plVal = eff.pnl;
+    const plPct = eff.pnlPct;
+    const plClass = plVal > 0 ? 'pos' : (plVal < 0 ? 'neg' : '');
 
     // Lista de transações históricas do papel
     let transactions = Array.isArray(a.transactions) && a.transactions.length > 0
@@ -2072,6 +2149,10 @@ function renderReportsHistory(assetFilter = 'ALL', typeFilter = 'ALL') {
             <div class="ham-item">
               <span class="ham-label">Cotação Atual</span>
               <span class="ham-val">${fmtCurrency(cur)}</span>
+            </div>
+            <div class="ham-item">
+              <span class="ham-label">Valor Atual</span>
+              <span class="ham-val ${plClass}">${fmtCurrency(totalCur)}</span>
             </div>
             <div class="ham-item">
               <span class="ham-label">Resultado Total</span>
@@ -2335,12 +2416,25 @@ document.getElementById('operation-form')?.addEventListener('submit', function(e
   const date   = document.getElementById('operation-date').value;
   const opType = document.getElementById('operation-type').value;
   const qty    = parseFloat(document.getElementById('operation-qty').value);
-  const price  = parseFloat(document.getElementById('operation-price').value);
+  let price    = parseFloat(document.getElementById('operation-price').value);
   const notes  = document.getElementById('operation-notes').value.trim();
 
   if (!ticker || !date || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
     showToast('Preencha os campos obrigatórios corretamente.', 'error');
     return;
+  }
+
+  // Detecção inteligente de conversão USD para BRL em Cripto
+  const isCryptoType = customType === 'CRYPTO' || (typeof QuoteService !== 'undefined' && QuoteService.isCryptoSymbol(ticker));
+  if (isCryptoType && price > 0) {
+    const q = getStockQuoteData(ticker);
+    const curBrl = q?.price;
+    const usdtRate = (typeof QuoteService !== 'undefined' && QuoteService._usdtBrl) ? QuoteService._usdtBrl : 5.85;
+    if (curBrl && curBrl > 0 && price * 3.8 < curBrl && price * 7.5 > curBrl) {
+      const orig = price;
+      price = price * usdtRate;
+      showToast(`💡 Preço em US$ ${fmtN(orig)} convertido para R$ ${fmtN(price)} (Câmbio R$ ${usdtRate.toFixed(2)})`, 'info');
+    }
   }
 
   if (!Array.isArray(state.portfolio)) {
@@ -2367,6 +2461,15 @@ document.getElementById('operation-form')?.addEventListener('submit', function(e
       transactions: []
     };
     state.portfolio.push(asset);
+
+    // Auto-fetch da cotação de mercado para o novo ativo
+    QuoteService.getQuotes([ticker]).then(quotes => {
+      if (quotes[ticker]?.price) {
+        asset.currentPrice = quotes[ticker].price;
+        saveEncryptedState();
+        renderAll();
+      }
+    });
   }
 
   if (!Array.isArray(asset.transactions)) {
@@ -2398,6 +2501,15 @@ document.getElementById('operation-form')?.addEventListener('submit', function(e
   // Recalcular saldo total e preço médio ponderado a partir de todas as transações
   recalculateAssetPositions(asset);
   asset.date = date;
+
+  // Atualiza cotação em tempo real imediatamente
+  QuoteService.getQuotes([ticker]).then(quotes => {
+    if (quotes[ticker]?.price) {
+      asset.currentPrice = quotes[ticker].price;
+      saveEncryptedState();
+      renderAll();
+    }
+  });
 
   saveEncryptedState();
   closeModal('modal-operation');
@@ -2476,14 +2588,9 @@ function renderSummary() {
   const currentMonthName = monthNamesPt[now.getMonth()];
 
   for (const a of (state.portfolio || [])) {
-    const qty = parseFloat(a.quantity) || 0;
-    const avg = parseFloat(a.avgPrice) || 0;
-    const quote = getStockQuoteData(a.ticker);
-    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
-      ? parseFloat(a.currentPrice)
-      : (quote?.price != null ? quote.price : avg);
-    totalInvestido += qty * avg;
-    totalAtual     += qty * cur;
+    const eff = getAssetEffectiveValues(a);
+    totalInvestido += eff.invested;
+    totalAtual     += eff.currentTotal;
 
     // Calcular aportes do mês e do ano a partir do histórico de transações
     if (Array.isArray(a.transactions) && a.transactions.length > 0) {
@@ -2711,16 +2818,13 @@ function renderInvestmentTrendChart() {
   let positiveAssetsCount = 0;
 
   const assetSeries = portfolio.map((a, idx) => {
-    const qty = parseFloat(a.quantity) || 0;
-    const avg = parseFloat(a.avgPrice) || 0;
-    const quote = getStockQuoteData(a.ticker);
-    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
-      ? parseFloat(a.currentPrice)
-      : (quote?.price != null ? quote.price : avg);
-
-    const inv = qty * avg;
-    const val = qty * cur;
-    const pnlPct = inv > 0 ? ((val - inv) / inv) * 100 : 0;
+    const eff = getAssetEffectiveValues(a);
+    const qty = eff.qty;
+    const avg = eff.avgPrice;
+    const cur = eff.currentPrice;
+    const inv = eff.invested;
+    const val = eff.currentTotal;
+    const pnlPct = eff.pnlPct;
 
     totalInvestido += inv;
     totalAtual     += val;
@@ -3039,11 +3143,18 @@ function renderInvestmentTrendChart() {
 
 function renderTrendAssetPills() {
   const container = document.getElementById('trend-asset-pills');
-  if (!container) return;
+  const heroContainer = document.getElementById('hero-monitored-asset-pills');
+  const heroCountEl = document.getElementById('hero-monitored-count');
 
   const portfolio = state.portfolio || [];
+  if (heroCountEl) {
+    heroCountEl.textContent = `${portfolio.length} ativo${portfolio.length !== 1 ? 's' : ''}`;
+  }
+
   if (portfolio.length === 0) {
-    container.innerHTML = `<span style="font-size:0.7rem;color:var(--text-muted);">Nenhum ativo cadastrado</span>`;
+    const emptyMsg = `<span style="font-size:0.7rem;color:var(--text-muted);">Nenhum ativo cadastrado</span>`;
+    if (container) container.innerHTML = emptyMsg;
+    if (heroContainer) heroContainer.innerHTML = emptyMsg;
     return;
   }
 
@@ -3055,15 +3166,8 @@ function renderTrendAssetPills() {
   `;
 
   portfolio.forEach((a, idx) => {
-    const qty = parseFloat(a.quantity) || 0;
-    const avg = parseFloat(a.avgPrice) || 0;
-    const quote = getStockQuoteData(a.ticker);
-    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
-      ? parseFloat(a.currentPrice)
-      : (quote?.price != null ? quote.price : avg);
-    const inv = qty * avg;
-    const curVal = qty * cur;
-    const pnlPct = inv > 0 ? ((curVal - inv) / inv) * 100 : 0;
+    const eff = getAssetEffectiveValues(a);
+    const pnlPct = eff.pnlPct;
     const pnlSign = pnlPct >= 0 ? '+' : '';
     const color = TREND_PALETTE_COLORS[idx % TREND_PALETTE_COLORS.length];
     const isAct = highlightedTrendTicker === a.ticker;
@@ -3077,7 +3181,8 @@ function renderTrendAssetPills() {
     `;
   });
 
-  container.innerHTML = html;
+  if (container) container.innerHTML = html;
+  if (heroContainer) heroContainer.innerHTML = html;
 }
 
 function renderTrendAssetsGrid() {
@@ -3098,15 +3203,10 @@ function renderTrendAssetsGrid() {
   }
 
   container.innerHTML = portfolio.map((a, idx) => {
-    const qty = parseFloat(a.quantity) || 0;
-    const avg = parseFloat(a.avgPrice) || 0;
-    const quote = getStockQuoteData(a.ticker);
-    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
-      ? parseFloat(a.currentPrice)
-      : (quote?.price != null ? quote.price : avg);
-    const inv = qty * avg;
-    const curVal = qty * cur;
-    const pnlPct = inv > 0 ? ((curVal - inv) / inv) * 100 : 0;
+    const eff = getAssetEffectiveValues(a);
+    const qty = eff.qty;
+    const cur = eff.currentPrice;
+    const pnlPct = eff.pnlPct;
     const pnlClass = pnlPct >= 0 ? 'pos' : 'neg';
     const isSelected = highlightedTrendTicker === a.ticker;
     const color = TREND_PALETTE_COLORS[idx % TREND_PALETTE_COLORS.length];
@@ -3414,12 +3514,8 @@ function renderAllocation() {
   let total = 0;
 
   for (const a of (state.portfolio || [])) {
-    const qty = parseFloat(a.quantity) || 0;
-    const quote = getStockQuoteData(a.ticker);
-    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
-      ? parseFloat(a.currentPrice)
-      : (quote?.price != null ? quote.price : (parseFloat(a.avgPrice) || 0));
-    const val = qty * cur;
+    const eff = getAssetEffectiveValues(a);
+    const val = eff.currentTotal;
     if (val <= 0) continue;
 
     // Determinar o Setor do Investimento
@@ -3527,19 +3623,17 @@ function renderPortfolio() {
   const marketOpen = isB3MarketOpen();
 
   list.innerHTML = items.map(a => {
-    const qty = parseFloat(a.quantity) || 0;
-    const avg = parseFloat(a.avgPrice) || 0;
-    const quote = getStockQuoteData(a.ticker);
-    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
-      ? parseFloat(a.currentPrice)
-      : (quote?.price != null ? quote.price : avg);
-    const invested = qty * avg;
-    const atualVal = qty * cur;
-    const pnl = atualVal - invested;
-    const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+    const eff = getAssetEffectiveValues(a);
+    const qty = eff.qty;
+    const avg = eff.avgPrice;
+    const cur = eff.currentPrice;
+    const invested = eff.invested;
+    const atualVal = eff.currentTotal;
+    const pnl = eff.pnl;
+    const pnlPct = eff.pnlPct;
     const [catClass, catLabel] = catBadges[a.type] || ['cat-other', 'OUTRO'];
     const pnlClass = pnl >= 0 ? 'positive' : 'negative';
-    const isClosedVal = !marketOpen || quote?.isClosed;
+    const isClosedVal = !marketOpen || getStockQuoteData(a.ticker)?.isClosed;
 
     return `
     <div class="asset-card" id="card-${a.id}">
@@ -3784,52 +3878,59 @@ function renderFavoritosWidget() {
     return;
   }
 
-  container.innerHTML = items.map(item => {
-    const info  = getStockInfo(item.ticker);
-    const q     = getStockQuoteData(item.ticker);
-    const price = q?.price != null ? fmtN(q.price) : '—';
-    const chg   = q?.changePercent ?? q?.change ?? null;
-    const chgClass = chg == null ? 'neutral' : chg >= 0 ? 'ok' : 'over';
-    const chgText  = chg != null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '—';
-    const nameStr  = item.name || info.name || item.ticker;
+  // Ordenação dos favoritos estritamente por ordem de ganhos diários (maior ganho para o menor)
+  const getDailyChange = (ticker) => {
+    const q = getStockQuoteData(ticker);
+    const chg = q?.changePercent ?? q?.change;
+    return chg != null ? parseFloat(chg) : -9999;
+  };
+  items.sort((a, b) => getDailyChange(b.ticker) - getDailyChange(a.ticker));
 
-    return `
-      <div class="fav-list-card" onclick="openAssetDetail('${escapeAttr(item.ticker)}')" title="Clique para ver gráfico TradingView e Detalhes de ${escapeAttr(item.ticker)}">
-        <div class="fav-list-left">
-          ${renderAssetLogoHtml(item.ticker, 'fav-logo')}
-          <div class="fav-list-info">
-            <div class="fav-ticker">${escapeHtml(item.ticker)}</div>
-            <div class="fav-name" title="${escapeHtml(nameStr)}">${escapeHtml(nameStr)}</div>
+  const renderCardsHtml = (listItems) => {
+    return listItems.map(item => {
+      const info  = getStockInfo(item.ticker);
+      const q     = getStockQuoteData(item.ticker);
+      const price = q?.price != null ? fmtN(q.price) : '—';
+      const chg   = q?.changePercent ?? q?.change ?? null;
+      const chgClass = chg == null ? 'neutral' : chg >= 0 ? 'ok' : 'over';
+      const chgText  = chg != null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '—';
+      const nameStr  = item.name || info.name || item.ticker;
+
+      return `
+        <div class="fav-list-card" onclick="openAssetDetail('${escapeAttr(item.ticker)}')" title="Clique para ver gráfico TradingView e Detalhes de ${escapeAttr(item.ticker)}">
+          <div class="fav-list-left">
+            ${renderAssetLogoHtml(item.ticker, 'fav-logo')}
+            <div class="fav-list-info">
+              <div class="fav-ticker">${escapeHtml(item.ticker)}</div>
+              <div class="fav-name" title="${escapeHtml(nameStr)}">${escapeHtml(nameStr)}</div>
+            </div>
+          </div>
+          <div class="fav-list-right">
+            <div class="fav-price">${price}</div>
+            <div class="fav-margin ${chgClass}">${chgText}</div>
           </div>
         </div>
-        <div class="fav-list-right">
-          <div class="fav-price">${price}</div>
-          <div class="fav-margin ${chgClass}">${chgText}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
+      `;
+    }).join('');
+  };
 
-  // Atualização em background das cotações da lista
+  container.innerHTML = renderCardsHtml(items);
+
+  // Atualização em background das cotações da lista e reordenação por ganhos diários
   const tickers = items.map(it => it.ticker);
   QuoteService.getQuotes(tickers).then(quotes => {
+    let hasUpdates = false;
     tickers.forEach(t => {
       const quote = quotes[t];
       if (!quote?.price) return;
       bestPrices[t] = quote;
-
-      const card = container.querySelector(`.fav-list-card[onclick*="'${t}'"]`);
-      if (!card) return;
-      const priceEl = card.querySelector('.fav-price');
-      if (priceEl) priceEl.textContent = fmtN(quote.price);
-
-      const chgVal = quote.changePercent ?? quote.change ?? null;
-      const chgEl = card.querySelector('.fav-margin');
-      if (chgEl && chgVal != null) {
-        chgEl.className = `fav-margin ${chgVal >= 0 ? 'ok' : 'over'}`;
-        chgEl.textContent = `${chgVal >= 0 ? '+' : ''}${chgVal.toFixed(2)}%`;
-      }
+      hasUpdates = true;
     });
+
+    if (hasUpdates) {
+      items.sort((a, b) => getDailyChange(b.ticker) - getDailyChange(a.ticker));
+      container.innerHTML = renderCardsHtml(items);
+    }
   });
 
   enableScrollDrag('favoritos-scroll');
@@ -4847,13 +4948,26 @@ document.getElementById('asset-form').addEventListener('submit', async function(
   const date    = document.getElementById('asset-date').value || new Date().toISOString().split('T')[0];
   const opType  = document.getElementById('asset-op-type').value || 'BUY';
   const qty     = parseFloat(document.getElementById('asset-quantity').value);
-  const avg     = parseFloat(document.getElementById('asset-avg-price').value);
+  let avg       = parseFloat(document.getElementById('asset-avg-price').value);
   const curRaw  = document.getElementById('asset-current-price').value;
   const cur     = curRaw ? parseFloat(curRaw) : null;
   const notes   = document.getElementById('asset-notes').value.trim();
 
   if (!ticker || isNaN(qty) || isNaN(avg)) {
     showToast('Preencha todos os campos obrigatórios.', 'error'); return;
+  }
+
+  // Detecção inteligente de conversão USD para BRL em Cripto
+  const isCryptoType = type === 'CRYPTO' || (typeof QuoteService !== 'undefined' && QuoteService.isCryptoSymbol(ticker));
+  if (isCryptoType && avg > 0) {
+    const q = getStockQuoteData(ticker);
+    const curBrl = q?.price;
+    const usdtRate = (typeof QuoteService !== 'undefined' && QuoteService._usdtBrl) ? QuoteService._usdtBrl : 5.85;
+    if (curBrl && curBrl > 0 && avg * 3.8 < curBrl && avg * 7.5 > curBrl) {
+      const orig = avg;
+      avg = avg * usdtRate;
+      showToast(`💡 Preço médio em US$ ${fmtN(orig)} convertido para R$ ${fmtN(avg)} (Câmbio R$ ${usdtRate.toFixed(2)})`, 'info');
+    }
   }
 
   const existing = editingId ? state.portfolio.find(x => x.id === editingId) : null;
@@ -4885,20 +4999,32 @@ document.getElementById('asset-form').addEventListener('submit', async function(
     const idx = state.portfolio.findIndex(x => x.id === editingId);
     if (idx !== -1) state.portfolio[idx] = item;
   } else {
-    state.portfolio.push(item);
-    // Auto-fetch quote
-    QuoteService.getQuotes([ticker]).then(quotes => {
-      if (quotes[ticker]?.price) {
-        const a = state.portfolio.find(x => x.id === id);
-        if (a) { a.currentPrice = quotes[ticker].price; saveEncryptedState(); renderAll(); }
-      }
-    });
+    // Se o ticker já existir na carteira, atualiza o item existente para evitar papéis duplicados conflitantes
+    const existingIdx = state.portfolio.findIndex(x => x.ticker === ticker);
+    if (existingIdx !== -1) {
+      item.id = state.portfolio[existingIdx].id;
+      state.portfolio[existingIdx] = item;
+    } else {
+      state.portfolio.push(item);
+    }
   }
+
+  // Auto-fetch da cotação imediata em tempo real
+  QuoteService.getQuotes([ticker]).then(quotes => {
+    if (quotes[ticker]?.price) {
+      const a = state.portfolio.find(x => x.ticker === ticker);
+      if (a) {
+        a.currentPrice = quotes[ticker].price;
+        saveEncryptedState();
+        renderAll();
+      }
+    }
+  });
 
   saveEncryptedState();
   closeModal('modal-asset');
   renderAll();
-  showToast(editingId ? 'Ativo atualizado!' : 'Ativo adicionado com sucesso!', 'success');
+  showToast(editingId ? 'Ativo atualizado!' : 'Ativo salvo com sucesso!', 'success');
 });
 
 function deleteAsset(id) {
@@ -5570,13 +5696,8 @@ function getGoalsState() {
 function calculateCurrentPortfolioTotal() {
   let total = 0;
   for (const a of (state.portfolio || [])) {
-    const qty = parseFloat(a.quantity) || 0;
-    const avg = parseFloat(a.avgPrice) || 0;
-    const quote = getStockQuoteData(a.ticker);
-    const cur = (a.currentPrice != null && parseFloat(a.currentPrice) > 0)
-      ? parseFloat(a.currentPrice)
-      : (quote?.price != null ? quote.price : avg);
-    total += qty * cur;
+    const eff = getAssetEffectiveValues(a);
+    total += eff.currentTotal;
   }
   return total;
 }
