@@ -1256,7 +1256,7 @@ const QuoteService = {
     try {
       const res = await fetch('https://scanner.tradingview.com/brazil/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
           symbols: { tickers: tvTickers },
           columns: ['close', 'change', 'change_abs', 'description']
@@ -1306,7 +1306,7 @@ const QuoteService = {
     try {
       const rTv = await fetch('https://scanner.tradingview.com/crypto/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
           symbols: { tickers: ['BINANCE:USDTBRL'] },
           columns: ['close']
@@ -1372,7 +1372,7 @@ const QuoteService = {
     try {
       const res = await fetch('https://scanner.tradingview.com/crypto/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
           symbols: { tickers: tvCryptoTickers },
           columns: ['close', 'change', 'change_abs', 'description']
@@ -1483,7 +1483,7 @@ const QuoteService = {
     try {
       const res = await fetch('https://scanner.tradingview.com/america/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
           symbols: { tickers },
           columns: ['close', 'change', 'change_abs', 'description']
@@ -4298,6 +4298,7 @@ async function refreshAllQuotes(showSpinner = true) {
 let currentDetailTicker = null;
 let currentValuationMethod = 'graham'; // 'graham', 'bazin', 'target', 'custom'
 let customTargetPrices = {};
+let detailRefreshTimer = null;
 
 function getStockInfo(ticker) {
   const clean = (ticker || '').toUpperCase().trim();
@@ -4410,7 +4411,10 @@ function openAssetDetail(ticker) {
   // 8. Renderizar Gráfico em Tempo Real TradingView
   renderTradingViewChart(clean, type);
 
-let detailRefreshTimer = null;
+  if (detailRefreshTimer) {
+    clearInterval(detailRefreshTimer);
+    detailRefreshTimer = null;
+  }
 
   // 9. Atualizar cotação fresca em tempo real alinhada ao TradingView
   delete QuoteService.cache[clean];
