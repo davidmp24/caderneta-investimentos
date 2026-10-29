@@ -1001,6 +1001,8 @@ function openApp() {
   initExplorer();
   refreshAllQuotes();
   refreshBestQuotes();
+  QuoteService.startRealtimePolling();
+  renderEconomicCalendar();
   SyncService.updateUi();
   SyncService.checkBackgroundSync(true);
   SyncService.startPeriodicSync();
@@ -1077,38 +1079,39 @@ function saveEncryptedState() {
 
 /* ─── Cotações Base de Fechamento (Último Fechamento da B3 / Fallback) ─ */
 const BASELINE_CLOSING_PRICES = {
-  'BBSE3':  { price: 42.16, change: 1.13,  name: 'BB Seguridade' },
-  'BBAS3':  { price: 22.52, change: 0.31,  name: 'Banco do Brasil' },
-  'CMIG4':  { price: 11.26, change: 0.72,  name: 'Cemig' },
-  'TAEE11': { price: 41.53, change: -0.05, name: 'Taesa' },
-  'TRPL4':  { price: 27.70, change: 0.22,  name: 'ISA Cteep' },
-  'UNIP6':  { price: 56.97, change: -0.47, name: 'Unipar' },
-  'SANB4':  { price: 15.03, change: -0.73, name: 'Santander Brasil' },
-  'AURE3':  { price: 12.00, change: 3.18,  name: 'Auren Energia' },
-  'KLBN4':  { price: 3.85,  change: -0.26, name: 'Klabin' },
-  'IRBR3':  { price: 62.21, change: 4.64,  name: 'IRB Brasil' },
-  'PETR4':  { price: 37.85, change: 0.53,  name: 'Petrobras PN' },
-  'VALE3':  { price: 61.20, change: -0.81, name: 'Vale S.A.' },
-  'ITUB4':  { price: 34.60, change: 0.29,  name: 'Itaú Unibanco PN' },
-  'WEGE3':  { price: 52.40, change: 1.12,  name: 'WEG S.A.' },
-  'HGLG11': { price: 165.20, change: 0.12, name: 'CSHG Logística' },
-  'BOVA11': { price: 132.50, change: 0.45, name: 'iShares Ibovespa' },
-  'XPLG11': { price: 104.80, change: -0.15, name: 'XP Log' },
-  'PRIO3':  { price: 46.80, change: 1.30,  name: 'PRIO S.A.' },
-  'B3SA3':  { price: 10.95, change: -0.18, name: 'B3 S.A.' },
-  'BBDC4':  { price: 14.30, change: 0.28,  name: 'Bradesco PN' },
-  'ABEV3':  { price: 12.35, change: -0.40, name: 'Ambev' },
-  'RENT3':  { price: 44.80, change: -0.65, name: 'Localiza' },
-  'SBSP3':  { price: 91.50, change: 0.85,  name: 'Sabesp' },
-  'SUZB3':  { price: 57.20, change: 1.05,  name: 'Suzano' },
-  'LREN3':  { price: 16.85, change: 0.35,  name: 'Lojas Renner' },
-  'MGLU3':  { price: 8.90,  change: -1.20, name: 'Magazine Luiza' },
-  'MXRF11': { price: 10.15, change: 0.00,  name: 'Maxi Renda' },
-  'KNIP11': { price: 94.50, change: 0.15,  name: 'Kinea IP' },
-  'KNCR11': { price: 103.80,change: 0.10,  name: 'Kinea Rendimentos' },
-  'BTLG11': { price: 101.40,change: -0.10, name: 'BTG Logística' },
-  'XPML11': { price: 112.50,change: 0.20,  name: 'XP Malls' },
-  'IVVB11': { price: 348.00,change: 0.60,  name: 'iShares S&P 500' },
+  'BBSE3':  { price: 35.80, change: 0.28,  name: 'BB Seguridade' },
+  'BBAS3':  { price: 16.78, change: -0.06, name: 'Banco do Brasil' },
+  'CMIG4':  { price: 11.45, change: 0.35,  name: 'Cemig' },
+  'TAEE11': { price: 39.89, change: 0.45,  name: 'Taesa' },
+  'TRPL4':  { price: 25.19, change: -0.63, name: 'ISA Cteep' },
+  'ISAE4':  { price: 25.19, change: -0.63, name: 'ISA Cteep' },
+  'UNIP6':  { price: 54.20, change: -0.37, name: 'Unipar' },
+  'SANB4':  { price: 14.15, change: -0.21, name: 'Santander Brasil' },
+  'AURE3':  { price: 11.85, change: 0.85,  name: 'Auren Energia' },
+  'KLBN4':  { price: 4.10,  change: -0.24, name: 'Klabin' },
+  'IRBR3':  { price: 42.50, change: 1.15,  name: 'IRB Brasil' },
+  'PETR4':  { price: 51.95, change: -1.07, name: 'Petrobras PN' },
+  'VALE3':  { price: 61.10, change: -0.46, name: 'Vale S.A.' },
+  'ITUB4':  { price: 35.20, change: 0.29,  name: 'Itaú Unibanco PN' },
+  'WEGE3':  { price: 48.04, change: 1.78,  name: 'WEG S.A.' },
+  'HGLG11': { price: 147.60, change: 0.01, name: 'CSHG Logística' },
+  'BOVA11': { price: 134.20, change: 0.35, name: 'iShares Ibovespa' },
+  'XPLG11': { price: 98.50, change: -0.10, name: 'XP Log' },
+  'PRIO3':  { price: 44.10, change: 0.80,  name: 'PRIO S.A.' },
+  'B3SA3':  { price: 11.80, change: -0.15, name: 'B3 S.A.' },
+  'BBDC4':  { price: 14.95, change: 0.20,  name: 'Bradesco PN' },
+  'ABEV3':  { price: 12.10, change: -0.15, name: 'Ambev' },
+  'RENT3':  { price: 42.60, change: -0.50, name: 'Localiza' },
+  'SBSP3':  { price: 93.80, change: 0.60,  name: 'Sabesp' },
+  'SUZB3':  { price: 56.40, change: 0.70,  name: 'Suzano' },
+  'LREN3':  { price: 15.70, change: 0.15,  name: 'Lojas Renner' },
+  'MGLU3':  { price: 7.80,  change: -1.00, name: 'Magazine Luiza' },
+  'MXRF11': { price: 8.99,  change: 0.11,  name: 'Maxi Renda' },
+  'KNIP11': { price: 93.80, change: 0.10,  name: 'Kinea IP' },
+  'KNCR11': { price: 102.50,change: 0.10,  name: 'Kinea Rendimentos' },
+  'BTLG11': { price: 99.80, change: -0.10, name: 'BTG Logística' },
+  'XPML11': { price: 108.20,change: 0.15,  name: 'XP Malls' },
+  'IVVB11': { price: 467.38,change: -0.01, name: 'iShares S&P 500' },
 };
 
 /** Verifica se a bolsa brasileira B3 está no horário de negociação aberto */
@@ -1140,15 +1143,15 @@ function isB3MarketOpen() {
 
 /** Obtém cotação para exibição: se mercado fechado, prioriza último valor de fechamento */
 function getStockQuoteData(ticker) {
-  const clean = (ticker || '').toUpperCase().trim();
+  const clean = (ticker || '').toUpperCase().trim().replace('.SA', '').replace(/^BMFBOVESPA:/, '');
   const marketOpen = isB3MarketOpen();
 
-  // 1. Cache do QuoteService (fonte primária) ou Best
-  const qCache = QuoteService.cache[clean];
-  const bCache = bestPrices[clean];
+  // 1. Cache do QuoteService (fonte primária com dados ao vivo) ou Best
+  const qCache = QuoteService.cache[clean] || (clean === 'TRPL4' ? QuoteService.cache['ISAE4'] : null);
+  const bCache = bestPrices[clean] || (clean === 'TRPL4' ? bestPrices['ISAE4'] : null);
   // explorerPrices só é usado se tiver .price numérico (estrutura confirmada)
   const eCache = (explorerPrices[clean] && typeof explorerPrices[clean].price === 'number') ? explorerPrices[clean] : null;
-  const cached = bCache || qCache || eCache;
+  const cached = qCache || bCache || eCache;
   if (cached && cached.price != null) {
     return {
       price: cached.price,
@@ -1199,169 +1202,16 @@ function getStockQuoteData(ticker) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   COTAÇÕES — YAHOO FINANCE + BINANCE
+   COTAÇÕES EM TEMPO REAL — TRADINGVIEW SCANNER ENGINE
    ═══════════════════════════════════════════════════════════ */
 
 const QuoteService = {
   cache: {},
-  CACHE_TTL: 5 * 60 * 1000,
-
-  async fetchYahoo(symbols) {
-    if (!symbols || symbols.length === 0) return {};
-    const result = {};
-    const marketOpen = isB3MarketOpen();
-
-    const fetchOne = async (rawSymbol) => {
-      const clean = rawSymbol.toUpperCase().trim();
-      let yahooTicker = clean;
-      if (clean === 'TRPL4') {
-        yahooTicker = 'ISAE4.SA'; // Ticker atualizado na B3
-      } else if (/^[A-Z]{3,6}\d{1,2}$/.test(clean) || /^[A-Z]{3,4}34$/.test(clean)) {
-        yahooTicker = clean + '.SA';
-      }
-
-      const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?interval=1d&range=1d`;
-
-      for (const proxy of CORS_PROXIES) {
-        try {
-          const targetUrl = proxy.includes('corsproxy.io')
-            ? `https://corsproxy.io/?${encodeURIComponent(chartUrl)}`
-            : `${proxy}${encodeURIComponent(chartUrl)}`;
-
-          const res = await fetch(targetUrl, { signal: AbortSignal.timeout(4500) });
-          if (!res.ok) continue;
-          const data = await res.json();
-          const meta = data?.chart?.result?.[0]?.meta;
-          if (meta) {
-            // Se o mercado está fechado, o regularMarketPrice representa o último preço de fechamento
-            const price = meta.regularMarketPrice ?? meta.chartPreviousClose ?? null;
-            const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
-            let change = 0;
-            if (price != null && prevClose != null && prevClose > 0) {
-              change = ((price - prevClose) / prevClose) * 100;
-            }
-            result[clean] = {
-              price,
-              previousClose: prevClose,
-              change,
-              name: meta.shortName || clean,
-              isClosed: !marketOpen,
-            };
-            return;
-          }
-        } catch { /* tentar próximo proxy */ }
-      }
-    };
-
-    await Promise.allSettled(symbols.map(s => fetchOne(s)));
-    return result;
-  },
-
-  async fetchBinance(symbols) {
-    if (!symbols || !symbols.length) return {};
-    const result = {};
-
-    // Cache da taxa USDT→BRL por 10 minutos
-    const now = Date.now();
-    if (!this._usdtBrlTs || (now - this._usdtBrlTs) > 600000) {
-      try {
-        const r = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL',
-          { signal: AbortSignal.timeout(3500) });
-        if (r.ok) {
-          const d = await r.json();
-          if (d?.price) { this._usdtBrl = parseFloat(d.price); this._usdtBrlTs = now; }
-        }
-      } catch { /* usa taxa padrão */ }
-    }
-    const usdtBrlRate = this._usdtBrl || 5.85;
-
-    const cryptoNameMap = {
-      'BITCOIN': 'BTC',
-      'ETHEREUM': 'ETH',
-      'SOLANA': 'SOL',
-      'CARDANO': 'ADA',
-      'DOGECOIN': 'DOGE',
-      'RIPPLE': 'XRP',
-      'TETHER': 'USDT'
-    };
-
-    for (const raw of symbols) {
-      const cleanRaw = raw.toUpperCase().trim();
-      const mapped = cryptoNameMap[cleanRaw] || cleanRaw;
-      const clean = mapped.replace(/USDT$|BRL$|BTC$/, '') || mapped;
-      const original = cleanRaw;
-
-      let fetched = false;
-
-      // 1. Tentar primeiro par direto BRL na Binance (ex: BTCBRL)
-      try {
-        const rBrl = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${clean}BRL`, { signal: AbortSignal.timeout(4000) });
-        if (rBrl.ok) {
-          const d = await rBrl.json();
-          const price = parseFloat(d.lastPrice);
-          if (price > 0) {
-            result[original] = {
-              price,
-              change: parseFloat(d.priceChangePercent) || 0,
-              changePercent: parseFloat(d.priceChangePercent) || 0,
-              name: `${original} (Binance)`,
-              isClosed: false,
-            };
-            fetched = true;
-          }
-        }
-      } catch {}
-
-      // 2. Se não encontrou BRL, tentar par USDT e converter com taxa de câmbio
-      if (!fetched) {
-        try {
-          const rUsdt = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${clean}USDT`, { signal: AbortSignal.timeout(4000) });
-          if (rUsdt.ok) {
-            const d = await rUsdt.json();
-            const priceUsdt = parseFloat(d.lastPrice);
-            if (priceUsdt > 0) {
-              result[original] = {
-                price: priceUsdt * usdtBrlRate,
-                change: parseFloat(d.priceChangePercent) || 0,
-                changePercent: parseFloat(d.priceChangePercent) || 0,
-                name: `${original} (Binance)`,
-                isClosed: false,
-              };
-              fetched = true;
-            }
-          }
-        } catch {}
-      }
-
-      // 3. Fallback com proxies CORS caso a requisição direta seja bloqueada
-      if (!fetched) {
-        for (const proxy of CORS_PROXIES) {
-          try {
-            const targetUrl = `https://api.binance.com/api/v3/ticker/price?symbol=${clean}BRL`;
-            const rProxy = await fetch(`${proxy}${encodeURIComponent(targetUrl)}`, { signal: AbortSignal.timeout(4000) });
-            if (rProxy.ok) {
-              const text = await rProxy.text();
-              const d = JSON.parse(text.contents || text);
-              const price = parseFloat(d?.price);
-              if (price > 0) {
-                result[original] = {
-                  price,
-                  change: 0,
-                  changePercent: 0,
-                  name: `${original} (Binance)`,
-                  isClosed: false,
-                };
-                fetched = true;
-                break;
-              }
-            }
-          } catch {}
-        }
-      }
-    }
-
-    return result;
-  },
+  CACHE_TTL: 30 * 1000, // 30s de TTL para manter dados frescos e alinhados com o gráfico TradingView
+  _usdtBrl: 5.36,
+  _usdtBrlTs: 0,
+  _pollingInterval: null,
+  _visibilityBound: false,
 
   isCryptoSymbol(ticker) {
     const clean = (ticker || '').toUpperCase().trim();
@@ -1381,41 +1231,352 @@ const QuoteService = {
            (clean.endsWith('BRL') && !clean.match(/^\w{4}\d{1,2}/));
   },
 
+  mapB3TickerToTv(ticker) {
+    const clean = (ticker || '').toUpperCase().trim();
+    if (clean === 'TRPL4') return 'BMFBOVESPA:ISAE4';
+    if (clean.includes(':')) return clean;
+    return `BMFBOVESPA:${clean}`;
+  },
+
+  async fetchTradingViewB3(symbols) {
+    if (!symbols || symbols.length === 0) return {};
+    const result = {};
+    const marketOpen = isB3MarketOpen();
+
+    const tickerMap = {};
+    const tvTickers = [];
+
+    for (const raw of symbols) {
+      const clean = raw.toUpperCase().trim();
+      const tvSym = this.mapB3TickerToTv(clean);
+      tvTickers.push(tvSym);
+      tickerMap[tvSym] = clean;
+    }
+
+    try {
+      const res = await fetch('https://scanner.tradingview.com/brazil/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbols: { tickers: tvTickers },
+          columns: ['close', 'change', 'change_abs', 'description']
+        }),
+        signal: AbortSignal.timeout(6000)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.data)) {
+          for (const item of data.data) {
+            const tvSym = item.s;
+            const originalTicker = tickerMap[tvSym] || tvSym.replace('BMFBOVESPA:', '');
+            const [closePrice, changePct, changeAbs, desc] = item.d || [];
+
+            if (typeof closePrice === 'number' && closePrice > 0) {
+              const quoteData = {
+                price: closePrice,
+                change: typeof changePct === 'number' ? changePct : 0,
+                changeAbs: typeof changeAbs === 'number' ? changeAbs : 0,
+                name: desc || originalTicker,
+                isClosed: !marketOpen,
+                source: 'TradingView',
+                ts: Date.now()
+              };
+
+              result[originalTicker] = quoteData;
+              if (originalTicker === 'TRPL4' || tvSym === 'BMFBOVESPA:ISAE4') {
+                result['TRPL4'] = quoteData;
+                result['ISAE4'] = quoteData;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao consultar TradingView Brazil Scanner:', e);
+    }
+
+    return result;
+  },
+
+  async updateUsdtBrlRate() {
+    const now = Date.now();
+    if (this._usdtBrlTs && (now - this._usdtBrlTs) < 300000) return;
+
+    try {
+      const rTv = await fetch('https://scanner.tradingview.com/crypto/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbols: { tickers: ['BINANCE:USDTBRL'] },
+          columns: ['close']
+        }),
+        signal: AbortSignal.timeout(4000)
+      });
+      if (rTv.ok) {
+        const d = await rTv.json();
+        const price = d?.data?.[0]?.d?.[0];
+        if (typeof price === 'number' && price > 0) {
+          this._usdtBrl = price;
+          this._usdtBrlTs = now;
+          return;
+        }
+      }
+    } catch {}
+
+    try {
+      const r = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL', { signal: AbortSignal.timeout(3500) });
+      if (r.ok) {
+        const d = await r.json();
+        if (d?.price) {
+          this._usdtBrl = parseFloat(d.price);
+          this._usdtBrlTs = now;
+        }
+      }
+    } catch {}
+  },
+
+  async fetchTradingViewCrypto(symbols) {
+    if (!symbols || symbols.length === 0) return {};
+    const result = {};
+
+    await this.updateUsdtBrlRate();
+    const usdtBrlRate = this._usdtBrl || 5.36;
+
+    const cryptoNameMap = {
+      'BITCOIN': 'BTC',
+      'ETHEREUM': 'ETH',
+      'SOLANA': 'SOL',
+      'CARDANO': 'ADA',
+      'DOGECOIN': 'DOGE',
+      'RIPPLE': 'XRP',
+      'TETHER': 'USDT'
+    };
+
+    const tvCryptoTickers = [];
+    const metaMap = {};
+
+    for (const raw of symbols) {
+      const cleanRaw = raw.toUpperCase().trim();
+      const mapped = cryptoNameMap[cleanRaw] || cleanRaw;
+      const clean = mapped.replace(/USDT$|BRL$|BTC$/, '') || mapped;
+
+      const tvSymBrl = `BINANCE:${clean}BRL`;
+      const tvSymUsdt = `BINANCE:${clean}USDT`;
+
+      tvCryptoTickers.push(tvSymBrl, tvSymUsdt);
+      metaMap[tvSymBrl] = { original: cleanRaw, base: clean, isBrl: true };
+      metaMap[tvSymUsdt] = { original: cleanRaw, base: clean, isBrl: false };
+    }
+
+    try {
+      const res = await fetch('https://scanner.tradingview.com/crypto/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbols: { tickers: tvCryptoTickers },
+          columns: ['close', 'change', 'change_abs', 'description']
+        }),
+        signal: AbortSignal.timeout(6000)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.data)) {
+          for (const item of data.data) {
+            const tvSym = item.s;
+            const meta = metaMap[tvSym];
+            if (!meta) continue;
+
+            const [closePrice, changePct, changeAbs, desc] = item.d || [];
+            if (typeof closePrice === 'number' && closePrice > 0) {
+              const finalPrice = meta.isBrl ? closePrice : (closePrice * usdtBrlRate);
+
+              if (!result[meta.original] || meta.isBrl) {
+                result[meta.original] = {
+                  price: finalPrice,
+                  change: typeof changePct === 'number' ? changePct : 0,
+                  changeAbs: typeof changeAbs === 'number' ? (meta.isBrl ? changeAbs : changeAbs * usdtBrlRate) : 0,
+                  name: desc || `${meta.original} (TradingView)`,
+                  isClosed: false,
+                  source: 'TradingView Crypto',
+                  ts: Date.now()
+                };
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao consultar TradingView Crypto Scanner:', e);
+    }
+
+    // Fallback Binance direto para criptos faltantes
+    const missing = symbols.filter(s => !result[s.toUpperCase().trim()]);
+    if (missing.length > 0) {
+      const binanceFallback = await this.fetchBinanceDirect(missing);
+      Object.assign(result, binanceFallback);
+    }
+
+    return result;
+  },
+
+  async fetchBinanceDirect(symbols) {
+    const result = {};
+    const usdtBrlRate = this._usdtBrl || 5.36;
+
+    for (const raw of symbols) {
+      const clean = raw.toUpperCase().trim().replace(/USDT$|BRL$|BTC$/, '');
+      try {
+        const rBrl = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${clean}BRL`, { signal: AbortSignal.timeout(3500) });
+        if (rBrl.ok) {
+          const d = await rBrl.json();
+          const price = parseFloat(d.lastPrice);
+          if (price > 0) {
+            result[raw.toUpperCase().trim()] = {
+              price,
+              change: parseFloat(d.priceChangePercent) || 0,
+              name: `${raw} (Binance)`,
+              isClosed: false,
+              source: 'Binance',
+              ts: Date.now()
+            };
+            continue;
+          }
+        }
+      } catch {}
+
+      try {
+        const rUsdt = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${clean}USDT`, { signal: AbortSignal.timeout(3500) });
+        if (rUsdt.ok) {
+          const d = await rUsdt.json();
+          const priceUsdt = parseFloat(d.lastPrice);
+          if (priceUsdt > 0) {
+            result[raw.toUpperCase().trim()] = {
+              price: priceUsdt * usdtBrlRate,
+              change: parseFloat(d.priceChangePercent) || 0,
+              name: `${raw} (Binance)`,
+              isClosed: false,
+              source: 'Binance',
+              ts: Date.now()
+            };
+          }
+        }
+      } catch {}
+    }
+    return result;
+  },
+
+  async fetchTradingViewAmerica(symbols) {
+    if (!symbols || !symbols.length) return {};
+    const result = {};
+    const tickers = [];
+    const symMap = {};
+
+    for (const raw of symbols) {
+      const clean = raw.toUpperCase().trim();
+      tickers.push(`NASDAQ:${clean}`, `NYSE:${clean}`);
+      symMap[`NASDAQ:${clean}`] = clean;
+      symMap[`NYSE:${clean}`] = clean;
+    }
+
+    try {
+      const res = await fetch('https://scanner.tradingview.com/america/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbols: { tickers },
+          columns: ['close', 'change', 'change_abs', 'description']
+        }),
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (d && Array.isArray(d.data)) {
+          for (const item of d.data) {
+            const original = symMap[item.s];
+            if (!original || result[original]) continue;
+            const [closePrice, changePct, changeAbs, desc] = item.d || [];
+            if (typeof closePrice === 'number' && closePrice > 0) {
+              result[original] = {
+                price: closePrice,
+                change: typeof changePct === 'number' ? changePct : 0,
+                name: desc || original,
+                isClosed: false,
+                source: 'TradingView US',
+                ts: Date.now()
+              };
+            }
+          }
+        }
+      }
+    } catch {}
+    return result;
+  },
+
   async getQuotes(tickers) {
     const now = Date.now();
-    const toFetch = tickers.filter(t => {
+    const cleanTickers = [...new Set((tickers || []).map(t => (t || '').toUpperCase().trim()).filter(Boolean))];
+
+    const toFetch = cleanTickers.filter(t => {
       const c = this.cache[t];
-      return !c || (now - c.ts) > this.CACHE_TTL;
+      return !c || (now - (c.ts || 0)) > this.CACHE_TTL;
     });
 
     if (toFetch.length > 0) {
       const cryptoTickers = toFetch.filter(t => this.isCryptoSymbol(t));
-      const b3Tickers     = toFetch.filter(t => !this.isCryptoSymbol(t));
+      const equityTickers = toFetch.filter(t => !this.isCryptoSymbol(t));
 
-      const [yahooData, binanceData] = await Promise.all([
-        b3Tickers.length     ? this.fetchYahoo(b3Tickers)      : {},
-        cryptoTickers.length ? this.fetchBinance(cryptoTickers) : {},
+      const [tvB3Data, tvCryptoData] = await Promise.all([
+        equityTickers.length ? this.fetchTradingViewB3(equityTickers) : Promise.resolve({}),
+        cryptoTickers.length ? this.fetchTradingViewCrypto(cryptoTickers) : Promise.resolve({})
       ]);
 
-      // Captura o timestamp APÓS o await para TTL preciso
       const fetchedAt = Date.now();
-      const allData = { ...yahooData, ...binanceData };
-      for (const [ticker, data] of Object.entries(allData)) {
-        this.cache[ticker] = { ...data, ts: fetchedAt };
+      const allData = { ...tvB3Data, ...tvCryptoData };
+
+      const missingEquity = equityTickers.filter(t => !allData[t]);
+      if (missingEquity.length > 0) {
+        const usData = await this.fetchTradingViewAmerica(missingEquity);
+        Object.assign(allData, usData);
       }
 
-      // Limpeza de entradas de cache mais antigas que 30 minutos (evita memory leak)
+      for (const [ticker, data] of Object.entries(allData)) {
+        if (data && typeof data.price === 'number') {
+          this.cache[ticker] = { ...data, ts: fetchedAt };
+        }
+      }
+
       const MAX_CACHE_AGE = 30 * 60 * 1000;
       for (const k of Object.keys(this.cache)) {
-        if (fetchedAt - this.cache[k].ts > MAX_CACHE_AGE) delete this.cache[k];
+        if (fetchedAt - (this.cache[k].ts || 0) > MAX_CACHE_AGE) delete this.cache[k];
       }
     }
 
-    return tickers.reduce((acc, t) => {
+    return cleanTickers.reduce((acc, t) => {
       acc[t] = this.cache[t] || null;
       return acc;
     }, {});
   },
+
+  startRealtimePolling() {
+    if (this._pollingInterval) clearInterval(this._pollingInterval);
+    this._pollingInterval = setInterval(() => {
+      if (document.hidden) return;
+      if (typeof refreshAllQuotes === 'function') {
+        refreshAllQuotes(false);
+      }
+    }, isB3MarketOpen() ? 30000 : 60000);
+
+    if (!this._visibilityBound) {
+      this._visibilityBound = true;
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && typeof refreshAllQuotes === 'function') {
+          refreshAllQuotes(false);
+        }
+      });
+    }
+  }
 };
 
 /* ═══════════════════════════════════════════════════════════
@@ -3310,114 +3471,195 @@ window.addEventListener('resize', () => {
    CALENDÁRIO ECONÔMICO GLOBAL — Eventos Macroeconômicos
    ═══════════════════════════════════════════════════════════ */
 
-let currentEconTab = 'weekly';
+let currentEconTab = 'tradingview';
 
-const GLOBAL_ECONOMIC_EVENTS = [
-  {
-    id: 'copom',
-    title: 'Decisão de Taxa de Juros (Copom / Selic)',
-    country: 'Brasil',
-    flag: '🇧🇷',
-    impact: 'high',
-    period: 'monthly',
-    dateLabel: '24 Set',
-    day: '24',
-    month: 'Set',
-    forecast: 'Manutenção / Ajuste Selic',
-    desc: 'Impacto direto em Renda Fixa, FIIs, Custo do Crédito e Ações da B3.'
-  },
-  {
-    id: 'fed_fomc',
-    title: 'Decisão de Juros do Federal Reserve (FOMC)',
-    country: 'EUA',
-    flag: '🇺🇸',
-    impact: 'high',
-    period: 'monthly',
-    dateLabel: '25 Set',
-    day: '25',
-    month: 'Set',
-    forecast: 'Projeção de Cortes Fed Funds',
-    desc: 'O evento de maior liquidez global: move o Dólar, Bolsas Mundiais e Cripto.'
-  },
-  {
-    id: 'ipca_br',
-    title: 'IPCA — Inflação Oficial do Brasil (IBGE)',
-    country: 'Brasil',
-    flag: '🇧🇷',
-    impact: 'high',
-    period: 'weekly',
-    dateLabel: '26 Set',
-    day: '26',
-    month: 'Set',
-    forecast: '+0,28% (Consenso Mercado)',
-    desc: 'Referência para NTN-B, Títulos IPCA+, dividendos de FIIs de papel e juros futuros.'
-  },
-  {
-    id: 'payroll_us',
-    title: 'Relatório de Emprego Não-Agrícola (Non-Farm Payroll)',
-    country: 'EUA',
-    flag: '🇺🇸',
-    impact: 'high',
-    period: 'weekly',
-    dateLabel: '03 Out',
-    day: '03',
-    month: 'Out',
-    forecast: '160k vagas esperadas',
-    desc: 'Termômetro do mercado de trabalho norte-americano e política de juros do Fed.'
-  },
-  {
-    id: 'cpi_us',
-    title: 'CPI — Índice de Inflação ao Consumidor (EUA)',
-    country: 'EUA',
-    flag: '🇺🇸',
-    impact: 'high',
-    period: 'monthly',
-    dateLabel: '10 Out',
-    day: '10',
-    month: 'Out',
-    forecast: '+0,2% m/m',
-    desc: 'Define a trajetória da inflação global e atratividade dos Treasuries.'
-  },
-  {
-    id: 'ecb_rates',
-    title: 'Decisão de Taxa de Juros do BCE (Zona do Euro)',
-    country: 'Europa',
-    flag: '🇪🇺',
-    impact: 'medium',
-    period: 'monthly',
-    dateLabel: '17 Out',
-    day: '17',
-    month: 'Out',
-    forecast: 'Taxa de Depósito 3,50%',
-    desc: 'Define a taxa de juros na Europa e fluxo cambial para mercados emergentes.'
-  },
-  {
-    id: 'china_pmi',
-    title: 'PMI de Atividade Industrial da China',
-    country: 'China',
-    flag: '🇨🇳',
-    impact: 'medium',
-    period: 'weekly',
-    dateLabel: '30 Set',
-    day: '30',
-    month: 'Set',
-    forecast: '49.8 pts',
-    desc: 'Grande catalisador para commodities globais: Vale (VALE3), Minério e Petróleo.'
-  },
-  {
-    id: 'gdp_br',
-    title: 'PIB — Crescimento da Economia Brasileira',
-    country: 'Brasil',
-    flag: '🇧🇷',
-    impact: 'high',
-    period: 'monthly',
-    dateLabel: '01 Nov',
-    day: '01',
-    month: 'Nov',
-    forecast: '+0,8% t/t',
-    desc: 'Medição oficial do ritmo de expansão do Brasil e lucros corporativos.'
+/**
+ * Gera eventos macroeconômicos dinâmicos com base na data REAL atual,
+ * evitando que as datas fiquem congeladas no passado.
+ */
+function getDynamicEconomicEvents() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-11
+  const currentDay = now.getDate();
+
+  // Helper para formatar dia e mês
+  const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const fullMonthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+  // Helper para obter a primeira sexta-feira de um mês (Payroll)
+  function getFirstFriday(year, month) {
+    const d = new Date(year, month, 1);
+    while (d.getDay() !== 5) {
+      d.setDate(d.getDate() + 1);
+    }
+    return d;
   }
-];
+
+  // 1. Payroll EUA (Primeira sexta do mês)
+  let payrollDate = getFirstFriday(currentYear, currentMonth);
+  if (payrollDate < now && payrollDate.getDate() !== currentDay) {
+    payrollDate = getFirstFriday(currentMonth === 11 ? currentYear + 1 : currentYear, (currentMonth + 1) % 12);
+  }
+
+  // 2. IPCA Brasil (IBGE - por volta do dia 10 do mês)
+  let ipcaDate = new Date(currentYear, currentMonth, 10);
+  if (ipcaDate.getDay() === 0) ipcaDate.setDate(11);
+  if (ipcaDate.getDay() === 6) ipcaDate.setDate(9);
+  if (ipcaDate < now && ipcaDate.getDate() !== currentDay) {
+    ipcaDate = new Date(currentMonth === 11 ? currentYear + 1 : currentYear, (currentMonth + 1) % 12, 10);
+  }
+
+  // 3. CPI EUA (Por volta do dia 12 a 14 do mês)
+  let cpiDate = new Date(currentYear, currentMonth, 13);
+  if (cpiDate.getDay() === 0) cpiDate.setDate(14);
+  if (cpiDate.getDay() === 6) cpiDate.setDate(12);
+  if (cpiDate < now && cpiDate.getDate() !== currentDay) {
+    cpiDate = new Date(currentMonth === 11 ? currentYear + 1 : currentYear, (currentMonth + 1) % 12, 13);
+  }
+
+  // 4. Decisão Copom / Taxa Selic (Quarta-feira próxima ou planejada)
+  // Reuniões a cada ~45 dias; computamos a próxima quarta-feira de decisão
+  let copomDate = new Date(currentYear, currentMonth, currentDay + ((3 - now.getDay() + 7) % 7 || 7));
+  if (copomDate.getDate() === currentDay && now.getHours() >= 19) {
+    copomDate.setDate(copomDate.getDate() + 7);
+  }
+
+  // 5. Decisão FOMC / Fed Funds (EUA)
+  let fedDate = new Date(copomDate);
+  fedDate.setDate(fedDate.getDate() + 14);
+
+  // 6. PMI Industrial Global / China (Início do mês, dia 1 a 3)
+  let pmiDate = new Date(currentYear, currentMonth, 1);
+  if (pmiDate < now && pmiDate.getDate() !== currentDay) {
+    pmiDate = new Date(currentMonth === 11 ? currentYear + 1 : currentYear, (currentMonth + 1) % 12, 1);
+  }
+
+  // 7. Decisão de Juros do BCE (Zona do Euro)
+  let ecbDate = new Date(currentYear, currentMonth, 18);
+  if (ecbDate < now && ecbDate.getDate() !== currentDay) {
+    ecbDate = new Date(currentMonth === 11 ? currentYear + 1 : currentYear, (currentMonth + 1) % 12, 18);
+  }
+
+  // 8. PIB — Crescimento da Economia Brasileira
+  let gdpDate = new Date(currentYear, currentMonth, 28);
+  if (gdpDate < now && gdpDate.getDate() !== currentDay) {
+    gdpDate = new Date(currentMonth === 11 ? currentYear + 1 : currentYear, (currentMonth + 1) % 12, 28);
+  }
+
+  const rawList = [
+    {
+      id: 'copom',
+      title: 'Decisão de Taxa de Juros (Copom / Selic)',
+      country: 'Brasil',
+      flag: '🇧🇷',
+      impact: 'high',
+      targetDate: copomDate,
+      forecast: 'Taxa Selic Oficial B3',
+      desc: 'Impacto direto em Renda Fixa, FIIs, Custo de Crédito e Ações da B3.'
+    },
+    {
+      id: 'fed_fomc',
+      title: 'Decisão de Juros do Federal Reserve (FOMC)',
+      country: 'EUA',
+      flag: '🇺🇸',
+      impact: 'high',
+      targetDate: fedDate,
+      forecast: 'Fed Funds Target Rate',
+      desc: 'O evento de maior liquidez global: move o Dólar, Bolsas Mundiais e Cripto.'
+    },
+    {
+      id: 'ipca_br',
+      title: 'IPCA — Inflação Oficial do Brasil (IBGE)',
+      country: 'Brasil',
+      flag: '🇧🇷',
+      impact: 'high',
+      targetDate: ipcaDate,
+      forecast: 'Consenso de Mercado (IBGE)',
+      desc: 'Referência para NTN-B, Títulos IPCA+, dividendos de FIIs de papel e juros futuros.'
+    },
+    {
+      id: 'payroll_us',
+      title: 'Relatório de Emprego Não-Agrícola (Non-Farm Payroll)',
+      country: 'EUA',
+      flag: '🇺🇸',
+      impact: 'high',
+      targetDate: payrollDate,
+      forecast: 'Criação de Vagas e Salários',
+      desc: 'Termômetro do mercado de trabalho norte-americano e política de juros do Fed.'
+    },
+    {
+      id: 'cpi_us',
+      title: 'CPI — Índice de Inflação ao Consumidor (EUA)',
+      country: 'EUA',
+      flag: '🇺🇸',
+      impact: 'high',
+      targetDate: cpiDate,
+      forecast: 'Inflação ao Consumidor Global',
+      desc: 'Define a trajetória dos juros globais e atratividade das Treasuries americanas.'
+    },
+    {
+      id: 'ecb_rates',
+      title: 'Decisão de Taxa de Juros do BCE (Zona do Euro)',
+      country: 'Europa',
+      flag: '🇪🇺',
+      impact: 'medium',
+      targetDate: ecbDate,
+      forecast: 'Taxa de Depósito BCE',
+      desc: 'Impacta o fluxo cambial europeu e apetite por risco em mercados emergentes.'
+    },
+    {
+      id: 'china_pmi',
+      title: 'PMI de Atividade Industrial da China',
+      country: 'China',
+      flag: '🇨🇳',
+      impact: 'medium',
+      targetDate: pmiDate,
+      forecast: 'Indicador de Atividade Industrial',
+      desc: 'Grande catalisador para commodities globais: Vale (VALE3), Minério e Petróleo.'
+    },
+    {
+      id: 'gdp_br',
+      title: 'PIB — Crescimento da Economia Brasileira',
+      country: 'Brasil',
+      flag: '🇧🇷',
+      impact: 'high',
+      targetDate: gdpDate,
+      forecast: 'Relatório Trimestral do PIB',
+      desc: 'Medição oficial do ritmo de expansão do Brasil e lucros corporativos.'
+    }
+  ];
+
+  // Ordena cronologicamente crescente pela data do evento
+  rawList.sort((a, b) => a.targetDate - b.targetDate);
+
+  const startOfToday = new Date(currentYear, currentMonth, currentDay).getTime();
+
+  return rawList.map(item => {
+    const itemDayTime = new Date(item.targetDate.getFullYear(), item.targetDate.getMonth(), item.targetDate.getDate()).getTime();
+    const diffDays = Math.round((itemDayTime - startOfToday) / (1000 * 60 * 60 * 24));
+
+    let countdownLabel = '';
+    if (diffDays === 0) countdownLabel = '🔴 Hoje';
+    else if (diffDays === 1) countdownLabel = '🟡 Amanhã';
+    else if (diffDays > 1 && diffDays <= 7) countdownLabel = `🟡 Em ${diffDays} dias`;
+    else if (diffDays > 7 && diffDays <= 14) countdownLabel = `🟢 Próx. Semana (${diffDays}d)`;
+    else countdownLabel = `📅 Em ${diffDays} dias`;
+
+    const dayStr = String(item.targetDate.getDate()).padStart(2, '0');
+    const monthStr = monthNames[item.targetDate.getMonth()];
+
+    return {
+      ...item,
+      day: dayStr,
+      month: monthStr,
+      dateLabel: `${dayStr} ${monthStr}`,
+      countdown: countdownLabel,
+      diffDays,
+      isWeekly: diffDays <= 7
+    };
+  });
+}
 
 function switchEconCalendarTab(tab) {
   currentEconTab = tab;
@@ -3449,13 +3691,34 @@ function renderEconomicCalendar() {
   }
 }
 
+function reloadEconomicCalendar() {
+  if (currentEconTab === 'tradingview') {
+    loadTradingViewEconomicWidget(true);
+    showToast('Agenda TradingView ao vivo atualizada!', 'info');
+  } else {
+    renderEconomicEventsList();
+    showToast('Agenda macroeconômica atualizada!', 'info');
+  }
+}
+
 function renderEconomicEventsList() {
   const container = document.getElementById('econ-events-list-container');
   if (!container) return;
 
+  const allEvents = getDynamicEconomicEvents();
   const events = currentEconTab === 'weekly'
-    ? GLOBAL_ECONOMIC_EVENTS.filter(e => e.period === 'weekly' || e.impact === 'high')
-    : GLOBAL_ECONOMIC_EVENTS;
+    ? allEvents.filter(e => e.isWeekly || e.diffDays <= 7)
+    : allEvents;
+
+  if (events.length === 0) {
+    container.innerHTML = `
+      <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.85rem;">
+        Nenhum evento macroeconômico previsto para os próximos 7 dias.<br>
+        Alterne para a aba <strong>🌐 TradingView Ao Vivo</strong> para visualizar todos os acontecimentos globais.
+      </div>
+    `;
+    return;
+  }
 
   container.innerHTML = events.map(ev => {
     const impactClass = ev.impact === 'high' ? 'high' : 'medium';
@@ -3473,6 +3736,7 @@ function renderEconomicEventsList() {
             <div class="ee-title-row">
               <span class="ee-title">${escapeHtml(ev.title)}</span>
               <span class="ee-impact-tag ${impactClass}">${impactText}</span>
+              <span class="badge-profit neutral" style="font-size:0.65rem;padding:1px 5px;font-weight:600;">${ev.countdown}</span>
             </div>
             <div class="ee-desc">${escapeHtml(ev.desc)}</div>
           </div>
@@ -3486,13 +3750,13 @@ function renderEconomicEventsList() {
   }).join('');
 }
 
-let tvWidgetLoaded = false;
-function loadTradingViewEconomicWidget() {
-  const container = document.querySelector('#econ-tradingview-container .tradingview-widget-container__widget');
-  if (!container || tvWidgetLoaded) return;
-  tvWidgetLoaded = true;
+function loadTradingViewEconomicWidget(force = false) {
+  const wrapper = document.getElementById('tv-events-widget-wrapper');
+  if (!wrapper) return;
+  if (wrapper.dataset.loaded === 'true' && !force) return;
 
-  container.innerHTML = '';
+  wrapper.innerHTML = '<div class="tradingview-widget-container__widget" style="height:480px;width:100%;"></div>';
+
   const script = document.createElement('script');
   script.type = 'text/javascript';
   script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-events.js';
@@ -3501,12 +3765,13 @@ function loadTradingViewEconomicWidget() {
     colorTheme: 'dark',
     isTransparent: true,
     width: '100%',
-    height: '420',
+    height: '480',
     locale: 'br',
     importanceFilter: '-1,0,1',
-    countryFilter: 'br,us,eu,gb,jp,cn'
+    currencyFilter: 'BRL,USD,EUR,GBP,CNY,JPY'
   });
-  container.appendChild(script);
+  wrapper.appendChild(script);
+  wrapper.dataset.loaded = 'true';
 }
 
 function renderAllocation() {
@@ -3993,9 +4258,9 @@ async function refreshBestQuotes() {
   }
 }
 
-async function refreshAllQuotes() {
+async function refreshAllQuotes(showSpinner = true) {
   const btn = document.getElementById('btn-sync-quotes');
-  if (btn) btn.classList.add('spinning');
+  if (btn && showSpinner) btn.classList.add('spinning');
 
   const portfolioTickers = (state.portfolio || []).map(p => p.ticker);
   const watchlistTickers = (state.watchlist || []).map(w => w.ticker);
@@ -4004,7 +4269,9 @@ async function refreshAllQuotes() {
 
   try {
     if (allTickers.length > 0) {
-      allTickers.forEach(t => delete QuoteService.cache[t]);
+      if (showSpinner) {
+        allTickers.forEach(t => delete QuoteService.cache[t]);
+      }
       const quotes = await QuoteService.getQuotes(allTickers);
       for (const [t, q] of Object.entries(quotes)) {
         if (q) bestPrices[t] = q;
@@ -4014,13 +4281,13 @@ async function refreshAllQuotes() {
     renderFavoritosWidget();
 
     // Sincronização em nuvem
-    if (derivedKey) {
+    if (derivedKey && showSpinner) {
       await SyncService.checkBackgroundSync(true);
     }
   } catch (err) {
     console.warn('Erro ao atualizar cotações:', err);
   } finally {
-    if (btn) btn.classList.remove('spinning');
+    if (btn && showSpinner) btn.classList.remove('spinning');
   }
 }
 
@@ -4143,7 +4410,10 @@ function openAssetDetail(ticker) {
   // 8. Renderizar Gráfico em Tempo Real TradingView
   renderTradingViewChart(clean, type);
 
-  // 9. Atualizar cotação fresca em segundo plano
+let detailRefreshTimer = null;
+
+  // 9. Atualizar cotação fresca em tempo real alinhada ao TradingView
+  delete QuoteService.cache[clean];
   QuoteService.getQuotes([clean]).then(quotes => {
     if (quotes[clean] && currentDetailTicker === clean) {
       bestPrices[clean] = quotes[clean];
@@ -4151,9 +4421,27 @@ function openAssetDetail(ticker) {
       renderDetailValuation(clean);
     }
   });
+
+  // Polling em alta frequência (15s) enquanto o usuário analisa o ativo e o gráfico
+  if (detailRefreshTimer) clearInterval(detailRefreshTimer);
+  detailRefreshTimer = setInterval(() => {
+    if (!currentDetailTicker || document.hidden) return;
+    delete QuoteService.cache[currentDetailTicker];
+    QuoteService.getQuotes([currentDetailTicker]).then(quotes => {
+      if (quotes[currentDetailTicker] && currentDetailTicker === clean) {
+        bestPrices[currentDetailTicker] = quotes[currentDetailTicker];
+        updateDetailPriceUI(currentDetailTicker);
+        renderDetailValuation(currentDetailTicker);
+      }
+    });
+  }, 15000);
 }
 
 function closeAssetDetail() {
+  if (detailRefreshTimer) {
+    clearInterval(detailRefreshTimer);
+    detailRefreshTimer = null;
+  }
   const detailEl = document.getElementById('modal-asset-detail');
   if (detailEl) {
     detailEl.classList.remove('active');
@@ -4464,7 +4752,7 @@ function renderTradingViewChart(ticker, type) {
   if (!container) return;
   container.innerHTML = '';
 
-  const clean = (ticker || '').toUpperCase().trim();
+  const clean = (ticker || '').toUpperCase().trim().replace('.SA', '').replace(/^BMFBOVESPA:/, '');
   const rawBase = clean.replace(/USDT$|BRL$|BTC$/, '');
   const isCrypto = type === 'CRYPTO' ||
                    KNOWN_CRYPTO_LIST.includes(clean) ||
@@ -4475,7 +4763,10 @@ function renderTradingViewChart(ticker, type) {
   let tvSymbol = `BMFBOVESPA:${clean}`;
   if (clean === 'TRPL4') tvSymbol = 'BMFBOVESPA:ISAE4';
   if (isCrypto) {
-    tvSymbol = `BINANCE:${rawBase || clean}USDT`;
+    const hasDirectBrl = ['BTC', 'ETH', 'SOL', 'BNB'].includes(rawBase || clean);
+    tvSymbol = hasDirectBrl ? `BINANCE:${rawBase || clean}BRL` : `BINANCE:${rawBase || clean}USDT`;
+  } else if (!/^[A-Z]{3,5}\d{1,2}[A-Z]?$/.test(clean) && !clean.includes(':')) {
+    tvSymbol = `NASDAQ:${clean}`;
   }
 
   const widgetId = `tv_chart_${Date.now()}`;
@@ -6168,6 +6459,7 @@ function renderAll() {
   renderFavoritosWidget();
   renderMonthlyGoalProgress();
   renderHeroGoalsBadge();
+  renderEconomicCalendar();
   if (currentTab === 'goals') renderGoalsView();
   if (currentTab === 'explorer') renderExplorerTable();
   if (currentTab === 'reports') {

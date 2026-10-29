@@ -1316,7 +1316,15 @@ main {
 
 .econ-tradingview-container {
   width: 100%;
-  min-height: 400px;
+  min-height: 480px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.econ-tradingview-container iframe {
+  width: 100% !important;
+  min-height: 480px !important;
+  border: none !important;
 }
 
 .btn-sm {

@@ -361,24 +361,29 @@
               <span>Ao Vivo</span>
             </span>
           </div>
-          <div class="econ-nav-tabs">
-            <button class="econ-tab-btn active" data-econtab="weekly" onclick="switchEconCalendarTab('weekly')">📅 Semanal</button>
-            <button class="econ-tab-btn" data-econtab="monthly" onclick="switchEconCalendarTab('monthly')">🗓️ Mensal</button>
-            <button class="econ-tab-btn" data-econtab="tradingview" onclick="switchEconCalendarTab('tradingview')">🌐 TradingView</button>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="econ-nav-tabs">
+              <button class="econ-tab-btn active" data-econtab="tradingview" onclick="switchEconCalendarTab('tradingview')">🌐 TradingView Ao Vivo</button>
+              <button class="econ-tab-btn" data-econtab="weekly" onclick="switchEconCalendarTab('weekly')">📅 Semanal</button>
+              <button class="econ-tab-btn" data-econtab="monthly" onclick="switchEconCalendarTab('monthly')">🗓️ Mensal</button>
+            </div>
+            <button class="action-btn-sm" onclick="reloadEconomicCalendar()" title="Recarregar Agenda de Eventos" style="height:28px;width:28px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid var(--border-card);background:var(--bg-surface);color:var(--text-secondary);cursor:pointer;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.19"/></svg>
+            </button>
           </div>
         </div>
 
         <div class="econ-calendar-card">
-          <!-- Lista de Eventos Macroeconômicos (Semanal / Mensal) -->
-          <div id="econ-events-list-container" class="econ-events-list">
-            <!-- Renderizado via JS -->
+          <!-- Embed do TradingView Economic Calendar (Ao Vivo) -->
+          <div id="econ-tradingview-container" class="econ-tradingview-container">
+            <div class="tradingview-widget-container" id="tv-events-widget-wrapper" style="height:480px;width:100%;">
+              <div class="tradingview-widget-container__widget" style="height:480px;width:100%;"></div>
+            </div>
           </div>
 
-          <!-- Embed do TradingView Economic Calendar (opcional quando selecionado) -->
-          <div id="econ-tradingview-container" class="econ-tradingview-container" style="display:none;">
-            <div class="tradingview-widget-container">
-              <div class="tradingview-widget-container__widget"></div>
-            </div>
+          <!-- Lista de Eventos Macroeconômicos Dinâmicos (Semanal / Mensal) -->
+          <div id="econ-events-list-container" class="econ-events-list" style="display:none;">
+            <!-- Renderizado dinamicamente via JS com base na data atual -->
           </div>
         </div>
       </div>
